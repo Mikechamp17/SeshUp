@@ -10,6 +10,10 @@ export type EmailData = {
   newStartsAt?: string;
   offerEnd?: string;
   classUrl?: string;
+  /** Owner invite: the link built when the invite was created. */
+  inviteUrl?: string;
+  /** Existing member made owner: where to sign in to the admin page. */
+  signInUrl?: string;
 };
 
 export type RenderedEmail = { subject: string; html: string };
@@ -23,6 +27,8 @@ export const TEMPLATE_NAMES = [
   "class_time_changed",
   "late_payment_refund",
   "waitlist_offer",
+  "owner_invite",
+  "owner_added",
 ] as const;
 
 export type TemplateName = (typeof TEMPLATE_NAMES)[number];
@@ -103,6 +109,20 @@ export function renderEmail(template: TemplateName, data: EmailData): RenderedEm
       return {
         subject: `A spot opened: ${data.className}`,
         html: wrap("A spot opened up", [classLine, `It is held for you until ${until}. Book and pay before then or it goes to the next person.${link}`]),
+      };
+    }
+    case "owner_invite": {
+      const link = data.inviteUrl ? ` <a href="${escapeHtml(data.inviteUrl)}">Choose your password</a> to get started.` : "";
+      return {
+        subject: `You're invited to run ${data.gymName} on SeshUp`,
+        html: wrap("You're invited", [`You have been invited to manage ${gym} on SeshUp, where members book your classes.${link}`]),
+      };
+    }
+    case "owner_added": {
+      const link = data.signInUrl ? ` <a href="${escapeHtml(data.signInUrl)}">Sign in to your admin page</a>.` : "";
+      return {
+        subject: `You now manage ${data.gymName} on SeshUp`,
+        html: wrap("You now manage a gym", [`You have been added as an owner of ${gym} on SeshUp.${link}`]),
       };
     }
   }

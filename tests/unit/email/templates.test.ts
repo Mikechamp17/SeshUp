@@ -11,6 +11,8 @@ const data: EmailData = {
   newStartsAt: "2026-11-23T17:00:00Z",
   offerEnd: "2026-11-23T14:00:00Z",
   classUrl: "https://seshup.test/g/pilot/classes/1",
+  inviteUrl: "https://seshup.test/auth/callback?token_hash=abc&type=invite&next=%2Fauth%2Fset-password%3Fnext%3D%2Fadmin%2Fpilot",
+  signInUrl: "https://seshup.test/auth/sign-in?next=%2Fadmin%2Fpilot",
 };
 
 describe("email templates", () => {
@@ -31,6 +33,13 @@ describe("email templates", () => {
   it("shows the new time and the held-until time", () => {
     expect(renderEmail("class_time_changed", data).html).toContain("Mon 23 Nov, 19:00");
     expect(renderEmail("waitlist_offer", data).html).toContain("Mon 23 Nov, 16:00");
+  });
+
+  it("builds the owner links from the data given at enqueue time", () => {
+    const invite = renderEmail("owner_invite", data).html;
+    expect(invite).toContain('href="https://seshup.test/auth/callback?token_hash=abc&amp;type=invite&amp;next=');
+    expect(renderEmail("owner_added", data).html).toContain('href="https://seshup.test/auth/sign-in?next=%2Fadmin%2Fpilot"');
+    expect(renderEmail("owner_invite", { ...data, gymName: "A<b>", inviteUrl: '"><script>' }).html).not.toContain("<script>");
   });
 
   it("escapes gym and class names so they cannot inject markup", () => {
