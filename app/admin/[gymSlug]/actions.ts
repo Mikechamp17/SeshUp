@@ -4,17 +4,14 @@ import { redirect } from "next/navigation";
 import { requireStaff } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { changeSessionTime, createSeries, parseSeriesForm, setSpotLimit, updateSeries } from "@/lib/booking/schedule";
+import { formText as text, withParams } from "@/lib/http/url";
 import { zonedTimeToUtc } from "@/lib/time/gym-time";
 
 // Every action re-checks that the caller is staff of the gym in the URL, then acts with the caller's own session,
 // so row-level security and the owner-facing database functions apply.
 
-function text(formData: FormData, name: string): string {
-  return String(formData.get(name) ?? "").trim();
-}
-
 function back(path: string, params: Record<string, string>): never {
-  redirect(`${path}?${new URLSearchParams(params).toString()}`);
+  redirect(withParams(path, params));
 }
 
 async function gymFor(slug: string) {

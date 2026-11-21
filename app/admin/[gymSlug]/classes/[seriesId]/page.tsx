@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { requireStaff } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
-import { Banner, first, type SearchParams } from "../../../banner";
+import { first, type SearchParams } from "@/lib/http/search-params";
+import { Banner } from "../../../banner";
 import { styles } from "../../../styles";
 import { updateSeriesAction } from "../../actions";
 import { SeriesForm } from "../../series-form";

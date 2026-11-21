@@ -2,10 +2,11 @@
 
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/roles";
+import { withParams } from "@/lib/http/url";
 import { createClient } from "@/lib/supabase/server";
 
 function back(params: Record<string, string>): never {
-  redirect(`/account/bookings?${new URLSearchParams(params).toString()}`);
+  redirect(withParams("/account/bookings", params));
 }
 
 /** Cancels the signed-in member's own booking. The database decides refund or no refund from the cutoff. */

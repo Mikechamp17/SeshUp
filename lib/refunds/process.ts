@@ -1,5 +1,5 @@
 import type { Rpc } from "@/lib/db/rpc";
-import { ProviderError, type PaymentProvider } from "@/lib/payments/provider";
+import type { PaymentProvider } from "@/lib/payments/provider";
 
 type Claimed = { refund_id: string; reference: string; amount_cents: number; was_submitting: boolean };
 
@@ -37,7 +37,7 @@ export async function processDueRefunds(options: { rpc: Rpc; provider: PaymentPr
       else submitted++;
     } catch (e) {
       failed++;
-      const message = e instanceof ProviderError || e instanceof Error ? e.message : "refund failed";
+      const message = e instanceof Error ? e.message : "refund failed";
       await rpc("fail_refund", { p_refund_id: row.refund_id, p_error: message });
     }
   }

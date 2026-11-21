@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createEmailStore, sendDueEmails, type Rpc } from "@/lib/email/outbox";
+import type { Rpc } from "@/lib/db/rpc";
+import { createEmailStore, sendDueEmails } from "@/lib/email/outbox";
 import { createResendSender } from "@/lib/email/send";
 import { reverifyPendingPayments } from "@/lib/booking/confirm";
 import { getPaymentProvider } from "@/lib/payments/factory";

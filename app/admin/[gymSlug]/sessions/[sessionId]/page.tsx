@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { requireStaff } from "@/lib/auth/roles";
+import { one } from "@/lib/db/rows";
 import { createClient } from "@/lib/supabase/server";
 import { formatGymDateTime } from "@/lib/time/gym-time";
-import { Banner, first, type SearchParams } from "../../../banner";
+import { first, type SearchParams } from "@/lib/http/search-params";
+import { Banner } from "../../../banner";
 import { styles } from "../../../styles";
 import { formatRand } from "@/lib/money/fees";
 import { changeTimeAction, setSpotLimitAction, updateSessionAction } from "../../actions";
@@ -27,25 +29,22 @@ export default async function SessionPage({
 
   const { data: session } = await supabase.from("class_sessions").select("*").eq("id", sessionId).single();
   if (!session) return <main style={styles.main}><p>Class date not found.</p></main>;
-  const { data: gym } = await supabase.from("gyms").select("timezone").eq("id", session.gym_id).single();
+  const [{ data: gym }, { data: coaches }, { data: bookings }, { data: waiting }, { data: takenData }] = await Promise.all([
+    supabase.from("gyms").select("timezone").eq("id", session.gym_id).single(),
+    supabase.from("coaches").select("id, name").eq("gym_id", session.gym_id).order("name"),
+    supabase
+      .from("bookings")
+      .select("status, hold_expires_at, profiles(name, email)")
+      .eq("session_id", sessionId)
+      .in("status", ["confirmed", "pending"])
+      .order("created_at"),
+    supabase.from("waitlist_entries").select("created_at, profiles(name)").eq("session_id", sessionId).order("created_at"),
+    supabase.rpc("session_spots_taken", { p_session_id: sessionId }),
+  ]);
   const tz = gym?.timezone ?? "Africa/Johannesburg";
-  const { data: coaches } = await supabase.from("coaches").select("id, name").eq("gym_id", session.gym_id).order("name");
-
-  const { data: bookings } = await supabase
-    .from("bookings")
-    .select("status, hold_expires_at, profiles(name, email)")
-    .eq("session_id", sessionId)
-    .in("status", ["confirmed", "pending"])
-    .order("created_at");
-  const { data: waiting } = await supabase
-    .from("waitlist_entries")
-    .select("created_at, profiles(name)")
-    .eq("session_id", sessionId)
-    .order("created_at");
-  const { data: takenData } = await supabase.rpc("session_spots_taken", { p_session_id: sessionId });
   const taken = typeof takenData === "number" ? takenData : 0;
 
-  const person = (b: { profiles: unknown }) => (Array.isArray(b.profiles) ? b.profiles[0] : b.profiles) as Person | null;
+  const person = (b: { profiles: unknown }) => one(b.profiles as Person | Person[] | null);
   const confirmed = (bookings ?? []).filter((b) => b.status === "confirmed");
   const pending = (bookings ?? []).filter((b) => b.status === "pending");
 

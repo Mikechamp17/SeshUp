@@ -3,7 +3,7 @@ import { requireOperator } from "@/lib/auth/roles";
 import { listGyms, requestOperatorContext } from "@/lib/operator/gyms";
 import { loadStatement, parseMonth } from "@/lib/operator/statements";
 import { styles } from "../../auth/styles";
-import { first, type AuthSearchParams } from "../../auth/search-params";
+import { first, type SearchParams } from "@/lib/http/search-params";
 import { operatorStyles } from "../styles";
 
 export const metadata = { title: "Statements" };
@@ -12,7 +12,7 @@ function currentMonth(): string {
   return new Date().toISOString().slice(0, 7);
 }
 
-export default async function StatementsPage({ searchParams }: { searchParams: AuthSearchParams }) {
+export default async function StatementsPage({ searchParams }: { searchParams: SearchParams }) {
   await requireOperator();
   const query = await searchParams;
   const gymId = first(query.gym);

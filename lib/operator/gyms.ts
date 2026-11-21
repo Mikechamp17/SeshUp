@@ -311,15 +311,6 @@ export function operatorCheck(supabase: SupabaseClient): () => Promise<void> {
   };
 }
 
-async function requestSiteUrl(): Promise<string> {
-  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
-  const { headers } = await import("next/headers");
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
-  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
-}
-
 /** The real context for a request. Nothing here runs until the operator check has passed. */
 export async function requestOperatorContext(provider?: PaymentProvider): Promise<OperatorContext> {
   const { createClient } = await import("@/lib/supabase/server");
@@ -337,6 +328,6 @@ export async function requestOperatorContext(provider?: PaymentProvider): Promis
     authAdmin: () => createSupabaseAuthAdmin(getAdmin()),
     rpc: () => (fn, args) => getAdmin().rpc(fn, args),
     provider: () => getPaymentProvider(provider),
-    appUrl: requestSiteUrl,
+    appUrl: async () => (await import("@/lib/site")).siteUrl(),
   };
 }

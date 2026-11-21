@@ -3,31 +3,35 @@ import { requireUser } from "@/lib/auth/roles";
 import { formatRand } from "@/lib/money/fees";
 import { createClient } from "@/lib/supabase/server";
 import { formatGymDateTime } from "@/lib/time/gym-time";
+import { one } from "@/lib/db/rows";
+import { first, type SearchParams } from "@/lib/http/search-params";
 import { styles } from "../../g/styles";
 import { cancelBooking } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Your bookings" };
 
-type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
-const first = (v: string | string[] | undefined) => (Array.isArray(v) ? (v[0] ?? "") : (v ?? ""));
 
 type Gym = { name: string; slug: string; timezone: string };
 type Session = { id: string; name: string; starts_at: string; price_cents: number; gyms: Gym | Gym[] | null };
 type Row = { id: string; class_sessions: Session | Session[] | null };
-
-const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
 
 export default async function MyBookingsPage({ searchParams }: { searchParams: SearchParams }) {
   const query = await searchParams;
   await requireUser("/account/bookings");
   const supabase = await createClient();
 
-  const { data } = await supabase
-    .from("bookings")
-    .select("id, class_sessions(id, name, starts_at, price_cents, gyms(name, slug, timezone))")
-    .eq("status", "confirmed")
-    .order("created_at");
+  const [{ data }, { data: waiting }] = await Promise.all([
+    supabase
+      .from("bookings")
+      .select("id, class_sessions(id, name, starts_at, price_cents, gyms(name, slug, timezone))")
+      .eq("status", "confirmed")
+      .order("created_at"),
+    supabase
+      .from("waitlist_entries")
+      .select("id, class_sessions(id, name, starts_at, gyms(name, slug, timezone))")
+      .order("created_at"),
+  ]);
   const now = new Date();
   const upcoming = ((data ?? []) as unknown as Row[])
     .map((b) => ({ id: b.id, session: one(b.class_sessions) }))
@@ -41,10 +45,6 @@ export default async function MyBookingsPage({ searchParams }: { searchParams: S
     }),
   );
 
-  const { data: waiting } = await supabase
-    .from("waitlist_entries")
-    .select("id, class_sessions(id, name, starts_at, gyms(name, slug, timezone))")
-    .order("created_at");
   const waitlisted = ((waiting ?? []) as unknown as { id: string; class_sessions: Session | Session[] | null }[])
     .map((w) => ({ id: w.id, session: one(w.class_sessions) }))
     .filter((w): w is { id: string; session: Session } => w.session !== null && new Date(w.session.starts_at) > now);

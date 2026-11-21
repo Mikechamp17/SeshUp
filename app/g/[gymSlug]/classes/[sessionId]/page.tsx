@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { formatRand } from "@/lib/money/fees";
 import { createClient } from "@/lib/supabase/server";
 import { formatGymDateTime } from "@/lib/time/gym-time";
+import { first, type SearchParams } from "@/lib/http/search-params";
 import { styles } from "../../../styles";
 import { bookClass } from "./actions";
 import { joinWaitlist, leaveWaitlist } from "./waitlist-actions";
@@ -22,8 +23,6 @@ type Row = {
   bookable: boolean;
 };
 
-type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
-const first = (v: string | string[] | undefined) => (Array.isArray(v) ? (v[0] ?? "") : (v ?? ""));
 
 export default async function ClassPage({
   params,

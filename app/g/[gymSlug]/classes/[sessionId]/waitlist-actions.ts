@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/roles";
+import { lookupMessage, withParams } from "@/lib/http/url";
 import { createClient } from "@/lib/supabase/server";
 
 const MESSAGES: Record<string, string> = {
@@ -14,12 +15,11 @@ const MESSAGES: Record<string, string> = {
 };
 
 function go(slug: string, sessionId: string, params: Record<string, string>): never {
-  redirect(`/g/${slug}/classes/${sessionId}?${new URLSearchParams(params).toString()}`);
+  redirect(withParams(`/g/${slug}/classes/${sessionId}`, params));
 }
 
 function friendly(message: string): string {
-  for (const [code, text] of Object.entries(MESSAGES)) if (message.includes(code)) return text;
-  return "Something went wrong. Please try again.";
+  return lookupMessage(MESSAGES, message, "Something went wrong. Please try again.");
 }
 
 export async function joinWaitlist(formData: FormData): Promise<void> {

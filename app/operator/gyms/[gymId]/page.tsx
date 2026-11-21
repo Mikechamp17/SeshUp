@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireOperator } from "@/lib/auth/roles";
 import { getGym, requestOperatorContext } from "@/lib/operator/gyms";
 import { styles } from "../../../auth/styles";
-import { first, type AuthSearchParams } from "../../../auth/search-params";
+import { first, type SearchParams } from "@/lib/http/search-params";
 import { connectPaymentsAction, inviteOwnerAction } from "../../actions";
 import { operatorStyles } from "../../styles";
 
@@ -14,7 +14,7 @@ export default async function GymPage({
   searchParams,
 }: {
   params: Promise<{ gymId: string }>;
-  searchParams: AuthSearchParams;
+  searchParams: SearchParams;
 }) {
   await requireOperator();
   const { gymId } = await params;

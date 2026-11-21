@@ -2,7 +2,8 @@ import Link from "next/link";
 import { requireStaff } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { formatGymDateTime } from "@/lib/time/gym-time";
-import { Banner, first, type SearchParams } from "../banner";
+import { first, type SearchParams } from "@/lib/http/search-params";
+import { Banner } from "../banner";
 import { styles } from "../styles";
 
 export const metadata = { title: "Gym admin" };

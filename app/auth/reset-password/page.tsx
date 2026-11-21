@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { requestPasswordReset } from "../actions";
-import { first, type AuthSearchParams } from "../search-params";
+import { first, type SearchParams } from "@/lib/http/search-params";
 import { styles } from "../styles";
 
 export const metadata = { title: "Reset password" };
 
-export default async function ResetPasswordPage({ searchParams }: { searchParams: AuthSearchParams }) {
+export default async function ResetPasswordPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const error = first(params.error);
   const sent = first(params.sent) === "1";

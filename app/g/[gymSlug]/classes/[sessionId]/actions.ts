@@ -2,8 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/roles";
+import { one } from "@/lib/db/rows";
 import { startCheckout, type CheckoutResult } from "@/lib/booking/checkout";
 import { getPaymentProvider } from "@/lib/payments/factory";
+import { lookupMessage, withParams } from "@/lib/http/url";
 import { siteUrl } from "@/lib/site";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -17,14 +19,11 @@ const MESSAGES: Record<string, string> = {
 };
 
 function friendly(message: string): string {
-  for (const [code, text] of Object.entries(MESSAGES)) {
-    if (message.includes(code)) return text;
-  }
-  return "Something went wrong starting your payment. Please try again.";
+  return lookupMessage(MESSAGES, message, "Something went wrong starting your payment. Please try again.");
 }
 
 function back(slug: string, sessionId: string, params: Record<string, string>): never {
-  redirect(`/g/${slug}/classes/${sessionId}?${new URLSearchParams(params).toString()}`);
+  redirect(withParams(`/g/${slug}/classes/${sessionId}`, params));
 }
 
 /** Takes a spot and sends the member to pay. A member already paying goes back to the same checkout. */
@@ -40,9 +39,7 @@ export async function bookClass(formData: FormData): Promise<void> {
     .select("gym_id, gyms!inner(slug, paystack_subaccount_code)")
     .eq("id", sessionId)
     .single();
-  const gym = (Array.isArray(session?.gyms) ? session?.gyms[0] : session?.gyms) as
-    | { slug: string; paystack_subaccount_code: string | null }
-    | undefined;
+  const gym = one(session?.gyms as { slug: string; paystack_subaccount_code: string | null } | { slug: string; paystack_subaccount_code: string | null }[] | null | undefined);
   if (!session || !gym || gym.slug !== slug || !gym.paystack_subaccount_code) {
     back(slug, sessionId, { error: MESSAGES.gym_not_connected });
   }

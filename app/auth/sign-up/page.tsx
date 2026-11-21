@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { safeNextPath } from "@/lib/auth/redirect";
 import { signUp } from "../actions";
-import { first, type AuthSearchParams } from "../search-params";
+import { first, type SearchParams } from "@/lib/http/search-params";
 import { styles } from "../styles";
 
 export const metadata = { title: "Create account" };
 
-export default async function SignUpPage({ searchParams }: { searchParams: AuthSearchParams }) {
+export default async function SignUpPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const next = safeNextPath(first(params.next));
   const error = first(params.error);

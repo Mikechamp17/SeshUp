@@ -2,18 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { safeNextPath } from "@/lib/auth/redirect";
+import { formText as field, withParams } from "@/lib/http/url";
 import { siteUrl } from "@/lib/site";
 import { createClient } from "@/lib/supabase/server";
-
-function field(formData: FormData, name: string): string {
-  const value = formData.get(name);
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function withParams(path: string, params: Record<string, string>): string {
-  const query = new URLSearchParams(params).toString();
-  return `${path}?${query}`;
-}
 
 export async function signUp(formData: FormData): Promise<void> {
   const name = field(formData, "name");

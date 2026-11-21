@@ -4,14 +4,13 @@ import { confirmByReference, type ConfirmOutcome } from "@/lib/booking/confirm";
 import { getPaymentProvider } from "@/lib/payments/factory";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { first, type SearchParams } from "@/lib/http/search-params";
 import { styles } from "../../../styles";
 import { AutoRefresh } from "./auto-refresh";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Payment" };
 
-type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
-const first = (v: string | string[] | undefined) => (Array.isArray(v) ? (v[0] ?? "") : (v ?? ""));
 const MAX_CHECKS = 6;
 
 /** Where the member lands after Paystack. The payment is confirmed here only after the provider says so. */

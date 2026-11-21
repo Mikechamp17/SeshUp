@@ -1,19 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { formText as field, withParams } from "@/lib/http/url";
 import { connectPayments, createGym, inviteOwner, OperatorAuthError, requestOperatorContext } from "@/lib/operator/gyms";
 
 // Every action runs its operator check first, inside the logic function, before
 // the service-role client is built. Page guards only decide what to show.
-
-function field(formData: FormData, name: string): string {
-  const value = formData.get(name);
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function withParams(path: string, params: Record<string, string>): string {
-  return `${path}?${new URLSearchParams(params).toString()}`;
-}
 
 // Runs the logic and returns where to go next. redirect() throws, so it is
 // called outside the try block.

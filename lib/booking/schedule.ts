@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { lookupMessage } from "@/lib/http/url";
 
 export const LEVELS = ["Beginner", "Intermediate", "Advanced", "Sparring"] as const;
 export type Level = (typeof LEVELS)[number];
@@ -27,10 +28,7 @@ const MESSAGES: Record<string, string> = {
 
 /** A short message for the database errors an owner can cause. Unknown errors are shown plainly. */
 export function friendlyError(message: string): string {
-  for (const [code, text] of Object.entries(MESSAGES)) {
-    if (message.includes(code)) return text;
-  }
-  return message;
+  return lookupMessage(MESSAGES, message, message);
 }
 
 export function parseSeriesForm(formData: FormData): { ok: true; value: SeriesInput } | { ok: false; error: string } {

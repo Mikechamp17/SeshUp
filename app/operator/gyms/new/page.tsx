@@ -1,13 +1,13 @@
 import { requireOperator } from "@/lib/auth/roles";
 import { DEFAULT_TIMEZONE } from "@/lib/operator/gyms";
 import { styles } from "../../../auth/styles";
-import { first, type AuthSearchParams } from "../../../auth/search-params";
+import { first, type SearchParams } from "@/lib/http/search-params";
 import { createGymAction } from "../../actions";
 import { operatorStyles } from "../../styles";
 
 export const metadata = { title: "New gym" };
 
-export default async function NewGymPage({ searchParams }: { searchParams: AuthSearchParams }) {
+export default async function NewGymPage({ searchParams }: { searchParams: SearchParams }) {
   await requireOperator();
   const error = first((await searchParams).error);
 

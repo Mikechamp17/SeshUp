@@ -1,4 +1,4 @@
-import type { Rpc } from "@/lib/email/outbox";
+import type { Rpc } from "@/lib/db/rpc";
 import { formatRand } from "@/lib/money/fees";
 import { isUuid, type OperatorContext } from "./gyms";
 
