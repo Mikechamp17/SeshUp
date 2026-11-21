@@ -41,6 +41,14 @@ export default async function MyBookingsPage({ searchParams }: { searchParams: S
     }),
   );
 
+  const { data: waiting } = await supabase
+    .from("waitlist_entries")
+    .select("id, class_sessions(id, name, starts_at, gyms(name, slug, timezone))")
+    .order("created_at");
+  const waitlisted = ((waiting ?? []) as unknown as { id: string; class_sessions: Session | Session[] | null }[])
+    .map((w) => ({ id: w.id, session: one(w.class_sessions) }))
+    .filter((w): w is { id: string; session: Session } => w.session !== null && new Date(w.session.starts_at) > now);
+
   const confirmId = first(query.cancel);
   const error = first(query.error);
   const message = first(query.message);
@@ -82,6 +90,24 @@ export default async function MyBookingsPage({ searchParams }: { searchParams: S
           </div>
         );
       })}
+      {waitlisted.length > 0 ? (
+        <>
+          <h2>Waitlists</h2>
+          {waitlisted.map((w) => {
+            const gym = one(w.session.gyms);
+            return (
+              <div key={w.id} style={styles.card}>
+                <strong>{w.session.name}</strong>
+                <div style={styles.small}>
+                  {gym ? `${gym.name} - ` : ""}
+                  {formatGymDateTime(w.session.starts_at, gym?.timezone ?? "Africa/Johannesburg")}
+                </div>
+                {gym ? <Link href={`/g/${gym.slug}/classes/${w.session.id}`}>Open class</Link> : null}
+              </div>
+            );
+          })}
+        </>
+      ) : null}
     </main>
   );
 }

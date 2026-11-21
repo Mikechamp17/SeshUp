@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatGymDateTime } from "@/lib/time/gym-time";
 import { styles } from "../../../styles";
 import { bookClass } from "./actions";
+import { joinWaitlist, leaveWaitlist } from "./waitlist-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -158,8 +159,22 @@ export default async function ClassPage({
         </form>
       ) : null}
 
-      {state === "waitlisted" ? <p role="status" style={styles.notice}>You&apos;re on the waitlist, number {waitPosition}.</p> : null}
-      {state === "full" ? <p>This class is full.</p> : null}
+      {state === "waitlisted" ? (
+        <form action={leaveWaitlist} style={styles.form}>
+          <input type="hidden" name="slug" value={gymSlug} />
+          <input type="hidden" name="sessionId" value={sessionId} />
+          <p role="status" style={styles.notice}>You&apos;re on the waitlist, number {waitPosition}. You are only charged if you book when a spot opens.</p>
+          <button type="submit" style={styles.secondary}>Leave the waitlist</button>
+        </form>
+      ) : null}
+      {state === "full" ? (
+        <form action={joinWaitlist} style={styles.form}>
+          <input type="hidden" name="slug" value={gymSlug} />
+          <input type="hidden" name="sessionId" value={sessionId} />
+          <p>This class is full.</p>
+          <button type="submit" style={styles.button}>Join the waitlist</button>
+        </form>
+      ) : null}
     </main>
   );
 }

@@ -35,6 +35,11 @@ describe("email templates", () => {
     expect(renderEmail("waitlist_offer", data).html).toContain("Mon 23 Nov, 16:00");
   });
 
+  it("builds the class link of a waitlist offer from the site address and the class path", () => {
+    const html = renderEmail("waitlist_offer", { ...data, classUrl: undefined, classPath: "/g/pilot/classes/9" }, "https://seshup.test/").html;
+    expect(html).toContain('href="https://seshup.test/g/pilot/classes/9"');
+  });
+
   it("builds the owner links from the data given at enqueue time", () => {
     const invite = renderEmail("owner_invite", data).html;
     expect(invite).toContain('href="https://seshup.test/auth/callback?token_hash=abc&amp;type=invite&amp;next=');

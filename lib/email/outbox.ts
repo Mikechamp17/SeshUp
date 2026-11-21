@@ -32,14 +32,14 @@ export function createEmailStore(rpc: Rpc): EmailStore {
 }
 
 /** Sends due outbox rows. A row is marked sent only after the provider accepts it. */
-export async function sendDueEmails(options: { store: EmailStore; sender: EmailSender; limit?: number }) {
+export async function sendDueEmails(options: { store: EmailStore; sender: EmailSender; limit?: number; baseUrl?: string }) {
   const rows = await options.store.claimDue(options.limit ?? 50);
   let sent = 0;
   let failed = 0;
   for (const row of rows) {
     try {
       if (!isTemplateName(row.template)) throw new Error(`Unknown email template: ${row.template}`);
-      const { subject, html } = renderEmail(row.template, row.data);
+      const { subject, html } = renderEmail(row.template, row.data, options.baseUrl);
       await options.sender.send({ to: row.recipient, subject, html });
       await options.store.markSent(row.id);
       sent++;

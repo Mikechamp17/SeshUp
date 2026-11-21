@@ -10,6 +10,8 @@ export type EmailData = {
   newStartsAt?: string;
   offerEnd?: string;
   classUrl?: string;
+  /** A site-relative path to the class page. The sender adds the site address. */
+  classPath?: string;
   /** Owner invite: the link built when the invite was created. */
   inviteUrl?: string;
   /** Existing member made owner: where to sign in to the admin page. */
@@ -52,7 +54,7 @@ export function isTemplateName(name: string): name is TemplateName {
   return (TEMPLATE_NAMES as readonly string[]).includes(name);
 }
 
-export function renderEmail(template: TemplateName, data: EmailData): RenderedEmail {
+export function renderEmail(template: TemplateName, data: EmailData, baseUrl?: string): RenderedEmail {
   const gym = escapeHtml(data.gymName);
   const cls = escapeHtml(data.className);
   const when = escapeHtml(formatGymDateTime(data.startsAt, data.timezone));
@@ -105,7 +107,8 @@ export function renderEmail(template: TemplateName, data: EmailData): RenderedEm
       };
     case "waitlist_offer": {
       const until = data.offerEnd ? escapeHtml(formatGymDateTime(data.offerEnd, data.timezone)) : "soon";
-      const link = data.classUrl ? ` <a href="${escapeHtml(data.classUrl)}">Book your spot</a>.` : "";
+      const url = data.classUrl ?? (data.classPath && baseUrl ? `${baseUrl.replace(/\/$/, "")}${data.classPath}` : undefined);
+      const link = url ? ` <a href="${escapeHtml(url)}">Book your spot</a>.` : "";
       return {
         subject: `A spot opened: ${data.className}`,
         html: wrap("A spot opened up", [classLine, `It is held for you until ${until}. Book and pay before then or it goes to the next person.${link}`]),

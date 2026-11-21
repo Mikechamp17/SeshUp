@@ -17,7 +17,7 @@ function getJobs(): Job[] {
   return [
     {
       name: "send-emails",
-      run: () => sendDueEmails({ store: createEmailStore(rpc), sender: createResendSender({ apiKey, from }) }),
+      run: () => sendDueEmails({ store: createEmailStore(rpc), sender: createResendSender({ apiKey, from }), baseUrl: process.env.APP_URL }),
     },
     {
       name: "reverify-payments",

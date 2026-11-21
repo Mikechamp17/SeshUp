@@ -79,7 +79,7 @@ export async function makeSession(
   await pool.query(
     `insert into public.class_sessions
        (id, gym_id, name, level, local_date, starts_at, length_minutes, spot_limit, price_cents, cutoff_hours, cancelled)
-     values ($1, $2, $3, 'Beginner', (now() + make_interval(hours => $4))::date, now() + make_interval(hours => $4),
+     values ($1, $2, $3, 'Beginner', (now() + $4::numeric * interval '1 hour')::date, now() + $4::numeric * interval '1 hour',
              60, $5, $6, 12, $7)`,
     [id, gymId, opts.name ?? "Boxing Basics", startsInHours, opts.spotLimit ?? 12, opts.priceCents ?? 10000, opts.cancelled ?? false],
   );
