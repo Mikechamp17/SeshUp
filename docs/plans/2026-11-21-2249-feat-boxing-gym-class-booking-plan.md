@@ -2,6 +2,7 @@
 title: SeshUp Boxing Gym Class Booking - Plan
 type: feat
 date: 2026-11-21
+deepened: 2026-11-21
 topic: boxing-gym-class-booking
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
@@ -235,18 +236,34 @@ This plan covers the first release: group class booking with card payment on a m
 ### Key Technical Decisions
 
 - KTD1. **Next.js (App Router, TypeScript) on Vercel with Supabase for Postgres, Auth, and row-level security.** One codebase serves the member pages, the owner admin, the operator area, the Paystack webhook, and the job endpoint. Supabase Auth covers email and password sign-in, invites (R29), and reset links (R30) without custom auth code. (session-settled: user-directed, chosen over Next.js with a separate Postgres host and auth library, and over Rails with Postgres: least to build and host, and the user already has Supabase and Vercel connected.)
-- KTD2. **Tenancy is a `gym_id` column on every gym-owned table, enforced by row-level security.** Owners are linked to gyms through a `gym_staff` table, and policies allow access only to rows of gyms where the caller is staff. The operator is a row in `platform_admins`. Member identity is global (`profiles` keyed by the auth user), while bookings, waitlist entries, and payments carry `gym_id` (R2, R28). Anonymous timetable reads go through one `security definer` function that returns only public fields (R11).
+- KTD2. **Tenancy is a `gym_id` column on every gym-owned table, enforced by row-level security.** Owners are linked to gyms through a `gym_staff` table, and policies allow access only to rows of gyms where the caller is staff. The operator is a row in `platform_admins`. Member identity is global (`profiles` keyed by the auth user), while bookings, waitlist entries, and payments carry `gym_id` (R2, R28). Anonymous timetable reads go through one `security definer` function that returns only public fields and accepts at most a 3-week range (R11).
+  - Staff may write only `coaches`, `class_series`, and `class_sessions`, with `WITH CHECK` so `gym_id` cannot change. Money tables (`payments`, `refunds`, `gym_ledger_entries`), booking status, and gym fee and sub-account columns are written only by service-role code or the functions below. Members have no direct insert or update on `bookings`.
+  - Members read their own profile. Staff read a profile only when that member has a booking or waitlist entry at their gym, so emails never leak across gyms.
+  - Database functions follow one boundary rule. Member-facing functions (`take_spot`, member cancel, waitlist join and leave) take no member id and derive the caller from `auth.uid()`. Every other function (confirm, refund, ledger, tidy, `offer_next`, owner cancel) is executable by `service_role` only, with execute revoked from `public`, `anon`, and `authenticated`. Every `security definer` function pins `search_path`.
+  - Role checks never read `user_metadata`, which users can edit.
 - KTD3. **The spot limit is enforced inside Postgres, not in app code.** A `take_spot` database function locks the class date row with `select ... for update`, counts the spots taken, and inserts the booking in the same transaction. A spot counts as taken when its booking is confirmed, or pending with an unexpired hold, or reserved by a live waitlist offer. A partial unique index on (class date, member) for active bookings enforces R24's one-booking rule. This is the only way R14 and AE1 hold under concurrent requests from many Vercel function instances.
+  - One SQL function, `spots_taken(session)`, owns the count. `take_spot`, confirm, the R26 limit edit, `offer_next`, and `public_timetable` all call it.
+  - Every path that takes or frees a spot locks the `class_sessions` row first, then bookings and offers. A path touching several sessions locks them in id order, which prevents deadlocks.
+  - `offer_next` runs in the same transaction as whatever freed the spot. `take_spot` also calls it under the lock before counting, so a hold that expired by time goes to the waitlist before anyone else (R19).
+  - When an offer holder starts checkout, `take_spot` marks the offer used in the same transaction, so the hold replaces the offer and the spot is not counted twice.
 - KTD4. **Holds expire by time, not by a job.** Every "spots taken" count compares `hold_expires_at` with `now()`, so a missed or late job can never block or overfill a class (R22). The scheduled job only tidies state and sends follow-up emails. The same rule applies to waitlist offers (R25).
-- KTD5. **Classes are stored as a series plus one row per date.** `class_series` holds the template and weekdays (R6). `class_sessions` holds one row per date with its own time, spot limit, price, cutoff, coach, and a cancelled flag, so single-date changes are plain row edits (R6, AE5). Sessions are generated for a rolling window of 2 weeks plus a margin (R24). Editing a series updates future sessions that have no bookings and no single-date edits. Sessions with bookings change only through single-date edits, which carry R26 and R27.
+- KTD5. **Classes are stored as a series plus one row per date.** `class_series` holds the template and weekdays (R6). `class_sessions` holds one row per date with its own time, spot limit, price, cutoff, coach, and a cancelled flag, so single-date changes are plain row edits (R6, AE5). Sessions are generated for a rolling window of 2 weeks plus a margin (R24). Editing a series updates future sessions that have no bookings and no single-date edits. Sessions with bookings change only through single-date edits, which carry R26 and R27. A series edit locks each session and re-checks for bookings before changing it. A unique index on (series, local date) makes generation an upsert, so running it twice never doubles a date.
 - KTD6. **Money is integer cents in ZAR, and time is UTC with a gym time zone.** Each gym has an IANA time zone (`Africa/Johannesburg` for the pilot). Cutoffs, holds, and the booking window are compared as absolute instants. The SeshUp fee for a booking is computed once at checkout, rounded half-up to the cent, and stored on the payment row, so later fee or price changes never alter it (R4, R26).
 - KTD7. **Paystack with one sub-account per gym.** The server initializes each transaction with the gym's sub-account code, a flat `transaction_charge` equal to SeshUp's fee in cents, and the processing fee borne by the sub-account. Stripe Connect does not support platforms registered in South Africa, and Yoco, Peach, and Ozow showed no usable split support. PayFast's split exists but is custom-integration only (see Alternative Approaches). All Paystack calls sit behind a `PaymentProvider` interface with a fake for tests, so a fallback provider would replace one module.
-- KTD8. **A payment is confirmed only by the server, never by the browser redirect.** The webhook route verifies the `x-paystack-signature` HMAC-SHA512 over the raw body, records the event in `payment_events` with a unique event key so retries are no-ops, then re-checks the transaction through Paystack's verify endpoint before acting. The checkout return page also calls verify, so a slow webhook does not leave the member waiting. Both paths call the same idempotent confirm step. If the hold ran out and the class is full, that step starts the R23 refund instead.
-- KTD9. **A refund ledger records who owes what.** Research reports that Paystack keeps its fee on refunds and may fund split refunds from SeshUp's main balance rather than the sub-account. Each refund writes `gym_ledger_entries` rows: the gym share SeshUp funded and the processing fee kept, attributed to the gym (R16, R17, R27) or to SeshUp (R23). The U5 test-mode check fixes which of these rows apply, and the operator statement sums them per month (R31).
-- KTD10. **Background work runs from Supabase `pg_cron`, calling one Next.js job endpoint.** A one-minute `pg_cron` schedule runs a SQL function that expires holds and offers, advances waitlists, and generates sessions. It then calls the `/api/jobs/run` route through `pg_net` with a shared secret, and that route sends outbox emails and processes pending refunds. This avoids depending on Vercel's cron frequency per plan, and correctness does not depend on it (KTD4).
+- KTD8. **A payment is confirmed only by the server, never by the browser redirect.** The webhook route verifies the `x-paystack-signature` HMAC-SHA512 over the raw body, records the event in `payment_events` with a unique event key so retries are no-ops, then re-checks the transaction through Paystack's verify endpoint before acting. The checkout return page also calls verify, so a slow webhook does not leave the member waiting. Both paths call the same idempotent confirm step.
+  - Confirm acts only when status is success, currency is ZAR, and the reference, amount, sub-account, and transaction charge all match the stored `payments` row. Price and fee come from the session row `take_spot` locked, never from the request.
+  - Confirm handles a success from any non-confirmed booking state (pending, expired, failed, released by the gym). It confirms only when the session is live, a spot is free, and the member has no other active booking on that date. Otherwise the booking becomes `refunded_late` with a refund attributed to SeshUp, or to the gym when the gym cancelled the date (R23).
+  - The return page shows status only to the member who owns the booking.
+- KTD9. **A refund ledger records who owes what.** Research reports that Paystack keeps its fee on refunds and may fund split refunds from SeshUp's main balance rather than the sub-account. Each refund writes `gym_ledger_entries` rows: the gym share SeshUp funded and the processing fee kept, attributed to the gym (R16, R17, R27) or to SeshUp (R23). Ledger rows are written only in the transaction that moves a refund to `processed`, guarded so a refund already processed writes nothing, with a unique index on (refund, entry kind). A refund that fails after Paystack accepted it writes no ledger rows. The U5 test-mode check fixes which rows apply, and the operator statement sums them per month (R31).
+- KTD10. **Background work runs from Supabase `pg_cron`, calling one Next.js job endpoint.** A one-minute `pg_cron` schedule runs a SQL function that expires holds and offers, advances waitlists, and generates sessions. It then calls the `/api/jobs/run` route through `pg_net` with a shared secret read from Supabase Vault, never written in a migration. The route compares it in constant time, then sends outbox emails and processes pending refunds. This avoids depending on Vercel's cron frequency per plan, and correctness does not depend on it (KTD4).
 - KTD11. **Email goes through an outbox table and Resend.** Domain events insert rows into `email_outbox` in the same transaction as the state change, and the job route sends them with retry and a sent marker. Supabase Auth's invite and reset emails use Resend over SMTP so all mail comes from one sending domain (R21, R29, R30).
 - KTD12. **Each gym's link is a path: `/g/<gym-slug>`.** It is one domain and one certificate, and the slug is set by the operator (R1). Owner pages live under `/admin/<gym-slug>` and operator pages under `/operator`.
 - KTD13. **Refunds run as background work with a status.** Cancelling writes the booking change and a `refunds` row with status `pending` in one transaction, and the job route calls Paystack. A failed call retries with backoff and shows on the operator area after repeated failures. This keeps an owner cancelling a 10-person class (AE3) fast and safe to retry.
+  - Refunds move through `pending`, `submitting`, `submitted`, then `processed` or `failed`, with a unique index on the payment so a payment has at most one refund.
+  - The job claims rows with `FOR UPDATE SKIP LOCKED`. Before retrying a row left in `submitting`, it asks Paystack for existing refunds on that transaction, and an "already refunded" reply counts as success.
+  - Status changes are conditional on the current state, so when an owner and a member cancel at once, the second change does nothing instead of failing.
+
+- KTD14. **Money history is never deleted, and personal data is kept minimal.** Foreign keys from bookings, payments, refunds, and ledger rows to sessions, profiles, and gyms use `ON DELETE RESTRICT`. Sessions and series are cancelled or ended, never deleted. Erasing a member anonymises their profile. `payment_events` stores only the fields SeshUp needs, and raw webhook payloads and sent outbox bodies are purged after 90 days.
 
 ### High-Level Technical Design
 
@@ -277,12 +294,17 @@ stateDiagram-v2
   pending --> refunded_late: payment verified after hold, class full (R23)
   pending --> expired: hold passes with no payment
   pending --> failed: payment failed
+  pending --> released_by_gym: owner cancels the date during checkout
+  expired --> confirmed: late success, spot still free
+  expired --> refunded_late: late success, no spot
+  failed --> refunded_late: late success on a failed attempt
+  released_by_gym --> refunded_late: late success after owner cancel
   confirmed --> cancelled_refund: member cancels before cutoff (R16) or after time change (R27)
   confirmed --> cancelled_no_refund: member cancels after cutoff (R16)
   confirmed --> cancelled_by_gym: owner cancels the date (R17)
 ```
 
-Refund rows have their own status (`pending`, `processed`, `failed`), so a booking's state never waits on Paystack.
+Refund rows have their own status (KTD13), so a booking's state never waits on Paystack.
 
 Checkout sequence (R13, R22, KTD8):
 
@@ -378,8 +400,8 @@ tests/
 ### System-Wide Impact
 
 - **Money:** Every amount is integer cents (KTD6). The ledger (KTD9) is the only place gym debts are tracked, so it must be written in the same transaction as each refund row.
-- **Auth boundary:** Three roles share one Supabase project: member, owner (via `gym_staff`), and operator (via `platform_admins`). The service-role key is used only in the webhook route, the job route, and operator actions, and never reaches the browser.
-- **Personal data:** Names and emails of members are stored per KTD2. Card data never touches SeshUp, because Paystack hosts the card form.
+- **Auth boundary:** Three roles share one Supabase project: member, owner (via `gym_staff`), and operator (via `platform_admins`). The service-role key lives in `lib/supabase/admin.ts`, marked server-only, and is used only in the webhook route, the job route, and operator actions. Every operator action re-checks `platform_admins` with `auth.getUser()` before using it. Middleware guards are for user experience only. RLS and the KTD2 function rule are the boundary.
+- **Personal data:** Names and emails of members are stored per KTD2. Card data never touches SeshUp, because Paystack hosts the card form. Gym bank details entered in U6 pass straight to Paystack and are never stored, logged, or sent to error tracking. Retention follows KTD14.
 - **Operations:** The operator area shows failed refunds, unsent emails, and gyms without a connected sub-account, so failures are visible without reading logs.
 
 ### Risks & Dependencies
@@ -444,7 +466,8 @@ U1 to U4 lay the base: project, schema, accounts, and email. U5 is the gate for 
   4. `take_spot(session_id)` implements KTD3 with the counting rule from KTD3 and KTD4. It rejects cancelled sessions, sessions outside R24's window, gyms with no sub-account (R3), and members who already hold an active booking.
   5. `public_timetable(gym_slug, from, to)` is the only anonymous read (KTD2). It returns time, coach name, level, price, and spots left, with no member data.
   6. RLS: members read their own bookings and waitlist entries. Staff read and write their gym's rows. Operators read all. No anonymous table access.
-  7. A spot-limit check (trigger or check in the update function) refuses a limit below spots taken (R26).
+  7. The R26 limit check runs in a function that locks the session and calls `spots_taken`.
+  8. Grants, policies, and foreign keys follow KTD2 and KTD14. Gym-owned text is escaped wherever it is rendered.
 - **Execution note:** Write the concurrency and tenancy tests first, against the real local database. Mocks cannot prove row locks or RLS.
 - **Patterns to follow:** Supabase RLS policy docs. Generated types from `supabase gen types`.
 - **Test scenarios:**
@@ -459,6 +482,11 @@ U1 to U4 lay the base: project, schema, accounts, and email. U5 is the gate for 
   - A member reads only their own bookings, across two gyms.
   - The anonymous role can call `public_timetable` and cannot select from any table.
   - `public_timetable` reports spots left that subtract confirmed, unexpired pending, and offered spots.
+  - The `authenticated` role cannot execute the confirm, refund, tidy, or `offer_next` functions.
+  - An owner updating their gym's fee or sub-account code, or setting a booking to confirmed, is refused.
+  - An owner of gym A cannot read the profile of a member who has only booked at gym B.
+  - Lowering a spot limit while a parallel `take_spot` runs never leaves spots taken above the limit.
+  - Deleting a profile or session that has payments is refused.
 - **Verification:** All database tests pass on a fresh `supabase db reset`, and generated types compile.
 
 ### U3. Accounts, sign-in, invites, and password reset
@@ -469,7 +497,7 @@ U1 to U4 lay the base: project, schema, accounts, and email. U5 is the gate for 
 - **Files:** `lib/supabase/server.ts`, `lib/supabase/browser.ts`, `lib/supabase/admin.ts`, `middleware.ts`, `app/auth/sign-up/page.tsx`, `app/auth/sign-in/page.tsx`, `app/auth/reset-password/page.tsx`, `app/auth/set-password/page.tsx`, `app/auth/callback/route.ts`, `lib/auth/roles.ts`, `tests/unit/auth/roles.test.ts`, `tests/e2e/auth.spec.ts`
 - **Approach:**
   1. Sign-up collects name, email, and password, and creates the `profiles` row through a database trigger on new auth users.
-  2. Sign-up and sign-in accept a `next` path so a member returns to the class they picked (F1).
+  2. Sign-up and sign-in accept a `next` path so a member returns to the class they picked (F1). Only same-origin paths starting with a single `/` are accepted, and Supabase redirect URLs are an allow-list.
   3. Owner invites use Supabase Auth's invite email. Accepting it lands on the set-password page.
   4. Password reset uses Supabase's emailed recovery link and the same set-password page (R30).
   5. `lib/auth/roles.ts` answers "is this user staff of gym X" and "is this user an operator" for route guards. RLS remains the real boundary (KTD2).
@@ -478,6 +506,7 @@ U1 to U4 lay the base: project, schema, accounts, and email. U5 is the gate for 
   - A new member signs up with name, email, and password, and a `profiles` row with that name exists.
   - A sign-up started from a class page returns the member to that class page after sign-up.
   - Sign-up with an email already in use shows an error and creates no second profile.
+  - `next=//evil.example` or `next=https://evil.example` lands on the default page.
   - A user who is not staff of gym X is redirected away from `/admin/x`.
   - A user who is not in `platform_admins` is redirected away from `/operator`.
   - A reset request for an existing email sends a recovery email, and following the link lets the user set a new password and sign in with it.
@@ -494,7 +523,7 @@ U1 to U4 lay the base: project, schema, accounts, and email. U5 is the gate for 
   1. `email_outbox` rows carry template key, recipient, data, attempts, and `sent_at`. Database functions insert them directly where state changes in SQL.
   2. The job route checks a shared secret header, then runs registered jobs in order: send due emails, then any jobs later units register.
   3. Sending marks a row sent only after Resend accepts it. Failures increase attempts with backoff, and rows past a set limit show in the operator area (U6).
-  4. The cron migration schedules a one-minute `pg_cron` job that runs the SQL tidy function (filled in by U9 and U11) and calls the job route with `pg_net` (KTD10).
+  4. The cron migration schedules a one-minute `pg_cron` job that runs the SQL tidy function (filled in by U9 and U11) and calls the job route with `pg_net`, reading the secret from Vault (KTD10).
   5. Templates are plain, phone-friendly HTML with the gym name, class, date in gym time, and amount where relevant.
 - **Test scenarios:**
   - A call to the job route without the secret returns 401 and sends nothing.
@@ -515,7 +544,7 @@ U1 to U4 lay the base: project, schema, accounts, and email. U5 is the gate for 
   2. `lib/money/fees.ts` computes the fee in cents from the price and the gym's basis points, rounding half-up (KTD6).
   3. The Paystack module uses its REST API with the secret key from the environment and never exposes it to the browser.
   4. The fake records calls and lets tests choose outcomes, including success, failure, and a late success.
-  5. The check script, run by hand against test mode, creates a test sub-account, takes a split payment, refunds it in full, and records what each balance shows and which webhook header and events arrive. The findings go in `docs/solutions/paystack-split-refunds.md` and decide which ledger rows KTD9 writes.
+  5. The check script, run by hand against test mode, creates a test sub-account, takes a split payment, refunds it in full, and records what each balance shows and which webhook header and events arrive. It also checks that a second full refund on the same transaction is rejected and that existing refunds can be looked up by transaction (KTD13). The findings go in `docs/solutions/paystack-split-refunds.md` and decide which ledger rows KTD9 writes.
 - **Execution note:** Run the test-mode check before starting U9. If it hits a Goal Capsule stop condition, stop and report.
 - **Test scenarios:**
   - Covers AE6. A R100.00 booking at 5% gives a fee of 500 cents, and initialize is called with amount 10000 and transaction charge 500.
@@ -535,7 +564,7 @@ U1 to U4 lay the base: project, schema, accounts, and email. U5 is the gate for 
 - **Files:** `app/operator/page.tsx`, `app/operator/gyms/new/page.tsx`, `app/operator/gyms/[gymId]/page.tsx`, `app/operator/statements/page.tsx`, `lib/operator/gyms.ts`, `lib/operator/statements.ts`, `tests/db/operator.test.ts`, `tests/unit/operator/statements.test.ts`
 - **Approach:**
   1. Create gym: name, slug, fee percentage, time zone (default `Africa/Johannesburg`).
-  2. Invite owner: sends the Supabase invite and adds a `gym_staff` owner row on acceptance.
+  2. Invite owner: the server sends the Supabase invite and inserts the `gym_staff` owner row at once, keyed to the user id the invite returns, so nothing in the link decides the gym. An email that already has a member account gets the owner row directly and a sign-in email instead.
   3. Connect payments: the operator enters the gym's bank details and the server creates the Paystack sub-account, storing only its code (R3).
   4. Problems view: gyms without a sub-account, refunds failed after retries, emails failed after retries.
   5. Statements: per gym, per calendar month in gym time, the sum of ledger entries the gym owes and the entries SeshUp absorbed (R31).
@@ -545,7 +574,9 @@ U1 to U4 lay the base: project, schema, accounts, and email. U5 is the gate for 
   - Connecting payments stores the sub-account code from the fake provider, and the gym's classes become bookable.
   - A gym with two refunds owed by the gym and one absorbed by SeshUp in March shows the gym total, SeshUp total, and each entry in the March statement only.
   - A refund failed past the retry limit appears in the problems view.
-  - A non-operator calling the operator server actions gets an authorization error.
+  - A non-operator calling any operator server action gets an authorization error.
+  - Inviting an email that already belongs to a member makes them owner of that gym only.
+  - Changing the gym id in an invite link does not attach the user to another gym.
 - **Verification:** An operator can take a new gym from creation to bookable in the local app, using the fake provider.
 
 ### U7. Owner admin: coaches, classes, and schedule
@@ -567,6 +598,8 @@ U1 to U4 lay the base: project, schema, accounts, and email. U5 is the gate for 
   - A single-date price change applies to the next booking and leaves existing payments unchanged (R26).
   - Moving a booked date's time queues one email per booked member and marks the date as time-changed.
   - Archiving a coach on a future session is refused with a message.
+  - A series edit racing a booking on one of its dates leaves that date unchanged.
+  - Running session generation twice for the same window creates no duplicate dates.
   - The session page lists 3 waitlisted members in the order they joined.
 - **Verification:** An owner can set up a weekly timetable and view a session roster in the local app on a phone viewport.
 
@@ -613,6 +646,10 @@ U1 to U4 lay the base: project, schema, accounts, and email. U5 is the gate for 
   - A failed payment moves the booking to failed and frees the spot.
   - Verify returns a different amount than the stored payment, and the booking is not confirmed and the event is flagged.
   - A member with a pending hold on a class date cannot start a second checkout for the same date.
+  - A success arrives after the owner cancelled the date, and the booking becomes `refunded_late` with a gym-attributed refund.
+  - A success arrives on an `expired` booking while the member holds a newer confirmed booking on the same date, and it is refunded, not confirmed.
+  - Verify returns the wrong currency or sub-account, and the booking is not confirmed.
+  - A member opening the return page with another member's reference sees no booking details.
 - **Verification:** The e2e booking flow passes with the fake provider, and one manual run in Paystack test mode confirms a booking end to end.
 
 ### U10. Cancellations, refunds, and the ledger
@@ -624,7 +661,7 @@ U1 to U4 lay the base: project, schema, accounts, and email. U5 is the gate for 
 - **Approach:**
   1. The bookings page lists upcoming confirmed bookings in gym time, with a Cancel button and a line saying whether the cancel will be refunded.
   2. A database function decides the outcome at the moment of cancel. Before the cutoff, or on a time-changed date (R27), the outcome is a full refund attributed to the gym. After the cutoff, the booking is cancelled with no refund. It frees the spot and signals U11.
-  3. Owner cancel adds the Cancel date button to the U7 session page. It marks the session cancelled, moves every confirmed booking to `cancelled_by_gym`, creates one pending refund per booking attributed to the gym, and releases pending holds (R17).
+  3. Owner cancel adds the Cancel date button to the U7 session page. It marks the session cancelled, moves every confirmed booking to `cancelled_by_gym`, creates one pending refund per booking attributed to the gym, moves pending holds to `released_by_gym`, and closes offers and waitlist entries (R17).
   4. The refund job calls the provider for each pending refund, marks it processed on success, writes ledger entries per KTD9 and the U5 findings, and queues the refund email. Failures retry with backoff (KTD13).
   5. Refund webhooks, when they arrive, update the refund row idempotently through the U9 webhook route.
 - **Test scenarios:**
@@ -634,6 +671,11 @@ U1 to U4 lay the base: project, schema, accounts, and email. U5 is the gate for 
   - A member cancels after the cutoff on a time-changed date and gets a full refund (R27).
   - The provider fails one refund twice and then succeeds, giving one processed refund and one ledger write.
   - Running the refund job twice in parallel refunds each payment once.
+  - The job crashes after Paystack accepts a refund and before marking it, and the retry finds the existing refund and does not refund again.
+  - A refund webhook and the job mark the same refund processed at once, and one set of ledger rows is written.
+  - A refund that fails after being submitted writes no ledger rows.
+  - An owner cancel and a member cancel on the same booking at once give one refund.
+  - Owner cancel closes live offers and waitlist entries on that date, and those members get no offer emails.
   - A member cannot cancel another member's booking.
   - A booking for a class that already started shows no Cancel button and the action refuses it.
 - **Verification:** Database tests pass, and a manual test-mode refund shows the ledger rows matching the U5 findings.
@@ -647,7 +689,7 @@ U1 to U4 lay the base: project, schema, accounts, and email. U5 is the gate for 
 - **Approach:**
   1. Join is allowed only when the session is full and the member holds no active booking on it. Leave removes the entry, and a live offer passes on at once.
   2. A database function `offer_next(session_id)` runs whenever a spot frees (cancel, failed payment, expired hold, lapsed offer). It applies the R25 timing from the waitlist flowchart, creates a `waitlist_offers` row that reserves the spot, and queues the offer email with a link to the class.
-  3. `take_spot` lets the offer holder use the reserved spot. On their confirmed booking, the entry and offer are removed.
+  3. `take_spot` lets the offer holder use the reserved spot and marks the offer used (KTD3). On their confirmed booking, the entry is removed. If their payment fails, the spot is freed and `offer_next` runs.
   4. The `pg_cron` SQL function lapses expired offers and calls `offer_next` for each (KTD10).
   5. The offer holder's checkout hold is capped at the offer end, so an offer can never outlive its window.
 - **Test scenarios:**
@@ -658,6 +700,9 @@ U1 to U4 lay the base: project, schema, accounts, and email. U5 is the gate for 
   - The offer holder books and pays within the offer, and the entry is removed and spots left stays 0.
   - A member who is not the offer holder cannot take the reserved spot.
   - A member leaves the waitlist while holding a live offer, and the next member gets the offer.
+  - During the offer holder's checkout, spots left counts their spot once.
+  - Two parallel cancels on a full class give exactly two offers to two different members.
+  - A hold expires with someone waiting, and a `take_spot` from a member not on the waitlist returns "full".
 - **Verification:** Database and e2e waitlist tests pass, and the local cron run advances an expired offer to the next member.
 
 ---
