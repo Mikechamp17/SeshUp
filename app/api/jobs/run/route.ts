@@ -3,6 +3,7 @@ import { createEmailStore, sendDueEmails, type Rpc } from "@/lib/email/outbox";
 import { createResendSender } from "@/lib/email/send";
 import { reverifyPendingPayments } from "@/lib/booking/confirm";
 import { getPaymentProvider } from "@/lib/payments/factory";
+import { processDueRefunds } from "@/lib/refunds/process";
 import { createJobsHandler } from "@/lib/jobs/handler";
 import type { Job } from "@/lib/jobs/registry";
 
@@ -21,6 +22,10 @@ function getJobs(): Job[] {
     {
       name: "reverify-payments",
       run: () => reverifyPendingPayments({ rpc, provider: getPaymentProvider() }),
+    },
+    {
+      name: "process-refunds",
+      run: () => processDueRefunds({ rpc, provider: getPaymentProvider() }),
     },
     {
       name: "purge-old-data",

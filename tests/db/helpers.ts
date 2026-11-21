@@ -102,6 +102,18 @@ export async function makeBooking(
   return id;
 }
 
+/** A confirmed booking with a succeeded payment, like one that went through checkout. */
+export async function makePaidBooking(sessionId: string, memberId: string, amountCents = 10000, feeCents = 500) {
+  const bookingId = await makeBooking(sessionId, memberId, "confirmed");
+  const [{ gym_id }] = await sql<{ gym_id: string }>("select gym_id from public.class_sessions where id = $1", [sessionId]);
+  await pool.query(
+    `insert into public.payments (gym_id, booking_id, amount_cents, fee_cents, provider_reference, status)
+     values ($1, $2, $3, $4, $5, 'succeeded')`,
+    [gym_id, bookingId, amountCents, feeCents, bookingId],
+  );
+  return bookingId;
+}
+
 export async function fillSession(sessionId: string, count: number) {
   for (let i = 0; i < count; i++) {
     await makeBooking(sessionId, await makeUser(`Filler ${i}`), "confirmed");

@@ -4,11 +4,14 @@ import { createClient } from "@/lib/supabase/server";
 import { formatGymDateTime } from "@/lib/time/gym-time";
 import { Banner, first, type SearchParams } from "../../../banner";
 import { styles } from "../../../styles";
+import { formatRand } from "@/lib/money/fees";
 import { changeTimeAction, setSpotLimitAction, updateSessionAction } from "../../actions";
+import { cancelDateAction } from "./cancel-action";
 
 export const metadata = { title: "Class date" };
 
 type Person = { name: string; email: string | null };
+type CancelPreview = { booked: number; refund_total_cents: number; waitlisted: number };
 
 export default async function SessionPage({
   params,
@@ -45,6 +48,14 @@ export default async function SessionPage({
   const person = (b: { profiles: unknown }) => (Array.isArray(b.profiles) ? b.profiles[0] : b.profiles) as Person | null;
   const confirmed = (bookings ?? []).filter((b) => b.status === "confirmed");
   const pending = (bookings ?? []).filter((b) => b.status === "pending");
+
+  // Cancelling a date is two steps: the owner sees who will be refunded before it happens.
+  const confirmCancel = first(query.cancel) === "1";
+  let preview: CancelPreview | null = null;
+  if (confirmCancel && !session.cancelled) {
+    const { data: p } = await supabase.rpc("cancel_preview", { p_session_id: sessionId });
+    preview = p as CancelPreview;
+  }
 
   // Two-step time change: pick a time, then see who will be told before it is saved.
   const to = first(query.to);
@@ -145,6 +156,23 @@ export default async function SessionPage({
               </label>
               <button type="submit" style={styles.secondary}>Review the change</button>
             </form>
+          )}
+
+          <h2>Cancel this date</h2>
+          {preview ? (
+            <form action={cancelDateAction} style={styles.form}>
+              <input type="hidden" name="slug" value={gymSlug} />
+              <input type="hidden" name="sessionId" value={sessionId} />
+              <p role="alert" style={styles.error}>
+                {preview.booked} booked member{preview.booked === 1 ? "" : "s"} will be refunded {formatRand(preview.refund_total_cents)} in total and emailed
+                {preview.waitlisted > 0 ? `. ${preview.waitlisted} waitlisted member${preview.waitlisted === 1 ? "" : "s"} will be removed from the waitlist` : ""}.
+                This cannot be undone.
+              </p>
+              <button type="submit" style={styles.danger}>Yes, cancel this class</button>
+              <Link href={`/admin/${gymSlug}/sessions/${sessionId}`}>Keep it</Link>
+            </form>
+          ) : (
+            <p><Link href={`/admin/${gymSlug}/sessions/${sessionId}?cancel=1`}>Cancel this date</Link></p>
           )}
         </>
       ) : null}

@@ -33,5 +33,12 @@ export async function handlePaymentWebhook(options: {
       return { status: 500, body: { error: "could not confirm" } };
     }
   }
+  if ((event.type === "refund.processed" || event.type === "refund.failed") && event.reference) {
+    const settled = await options.rpc("settle_refund_by_reference", {
+      p_reference: event.reference,
+      p_outcome: event.type === "refund.processed" ? "processed" : "failed",
+    });
+    if (settled.error) return { status: 500, body: { error: "could not settle refund" } };
+  }
   return { status: 200, body: { received: true } };
 }
