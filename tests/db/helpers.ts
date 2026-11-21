@@ -107,3 +107,25 @@ export async function fillSession(sessionId: string, count: number) {
     await makeBooking(sessionId, await makeUser(`Filler ${i}`), "confirmed");
   }
 }
+
+/** An `rpc` that calls the real SQL functions as one role, shaped like supabase-js (scalars unwrapped, tables as arrays). */
+export function makeRpc(role: Role, userId?: string) {
+  return async (fn: string, args: Record<string, unknown> = {}) => {
+    const names = Object.keys(args);
+    const placeholders = names.map((n, i) => `${n} => $${i + 1}`).join(", ");
+    const client = await pool.connect();
+    try {
+      await client.query(`set role ${role}`);
+      await client.query("select set_config('request.jwt.claim.sub', $1, false)", [userId ?? ""]);
+      const res = await client.query(`select * from public.${fn}(${placeholders})`, names.map((n) => args[n]));
+      const unwrap = res.rows.length === 1 && Object.keys(res.rows[0]).length === 1 && fn in res.rows[0];
+      return { data: unwrap ? res.rows[0][fn] : res.rows, error: null };
+    } catch (e) {
+      return { data: null, error: { message: (e as Error).message } };
+    } finally {
+      await client.query("reset role");
+      await client.query("select set_config('request.jwt.claim.sub', '', false)");
+      client.release();
+    }
+  };
+}

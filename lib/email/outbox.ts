@@ -1,11 +1,8 @@
 import { isTemplateName, renderEmail, type EmailData } from "@/lib/email/templates";
 import type { EmailSender } from "@/lib/email/send";
+import type { Rpc } from "@/lib/db/rpc";
 
-/** The shape of supabase-js `rpc`, so the store runs against the real SQL functions in tests. */
-export type Rpc = (
-  fn: string,
-  args?: Record<string, unknown>,
-) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+export type { Rpc };
 
 export type OutboxRow = { id: string; template: string; recipient: string; data: EmailData };
 

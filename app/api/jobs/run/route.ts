@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createEmailStore, sendDueEmails, type Rpc } from "@/lib/email/outbox";
 import { createResendSender } from "@/lib/email/send";
+import { reverifyPendingPayments } from "@/lib/booking/confirm";
+import { getPaymentProvider } from "@/lib/payments/factory";
 import { createJobsHandler } from "@/lib/jobs/handler";
 import type { Job } from "@/lib/jobs/registry";
 
@@ -15,6 +17,10 @@ function getJobs(): Job[] {
     {
       name: "send-emails",
       run: () => sendDueEmails({ store: createEmailStore(rpc), sender: createResendSender({ apiKey, from }) }),
+    },
+    {
+      name: "reverify-payments",
+      run: () => reverifyPendingPayments({ rpc, provider: getPaymentProvider() }),
     },
     {
       name: "purge-old-data",

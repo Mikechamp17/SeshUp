@@ -1,9 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrentUser, isOperator } from "@/lib/auth/roles";
-import type { Rpc } from "@/lib/email/outbox";
+import type { Rpc } from "@/lib/db/rpc";
 import type { EmailData } from "@/lib/email/templates";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createPaystackProvider } from "@/lib/payments/paystack";
+import { getPaymentProvider } from "@/lib/payments/factory";
 import { ProviderError, type PaymentProvider } from "@/lib/payments/provider";
 
 // Operator logic. Every exported function checks the caller is an operator
@@ -76,16 +76,6 @@ export type OperatorContext = {
 export type ActionResult<T extends object = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error });
-
-// ---------------------------------------------------------------------------
-// Payment provider factory. Tests pass the fake. The default talks to Paystack.
-
-export function getPaymentProvider(override?: PaymentProvider): PaymentProvider {
-  if (override) return override;
-  const secretKey = process.env.PAYSTACK_SECRET_KEY;
-  if (!secretKey) throw new Error("PAYSTACK_SECRET_KEY is not set");
-  return createPaystackProvider({ secretKey });
-}
 
 // ---------------------------------------------------------------------------
 // Validation
