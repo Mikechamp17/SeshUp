@@ -93,6 +93,20 @@ describe("session generation", () => {
   });
 });
 
+describe("moving a series date", () => {
+  it("keeps the original slot taken, so the per-minute tidy does not create the date again", async () => {
+    const gym = await makeGym();
+    const owner = await makeStaff(gym.id);
+    const series = await makeSeries(gym.id, owner);
+    const [{ id: target }] = await sql<{ id: string }>("select id from public.class_sessions where series_id = $1 order by starts_at limit 1", [series]);
+    const [{ before }] = await sql<{ before: number }>("select count(*)::int as before from public.class_sessions where series_id = $1", [series]);
+    await asUser(owner, (q) => q("select public.change_session_time($1, now() + interval '20 days')", [target]));
+    await sql("select public.tidy()");
+    const [{ after }] = await sql<{ after: number }>("select count(*)::int as after from public.class_sessions where series_id = $1", [series]);
+    expect(after).toBe(before);
+  });
+});
+
 describe("series edits", () => {
   it("updates future sessions with no bookings and leaves a session with a booking unchanged", async () => {
     const gym = await makeGym();

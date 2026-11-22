@@ -26,3 +26,18 @@ Fill in `.env.local`. Every variable is described in `.env.example`.
 | `npm run test:e2e` | End-to-end tests on a phone viewport (Playwright). Needs the local Supabase stack (`supabase start`) |
 
 Database tests apply `supabase/tests/shim.sql` first. It stands in for the Supabase roles and auth helpers when the target is plain Postgres.
+
+## After deploying
+
+1. Apply `supabase/migrations/` to the Supabase project (`supabase db push`).
+2. Store the job route address and shared secret in Supabase Vault, so the per-minute cron job can call the app. Run once in the SQL editor, with your own values:
+
+```sql
+select vault.create_secret('https://YOUR-APP-URL/api/jobs/run', 'job_url');
+select vault.create_secret('YOUR-JOB-SECRET', 'job_secret');
+```
+
+The same secret goes in the `JOB_SECRET` environment variable on Vercel. Until both secrets exist the cron job does nothing, and pending refunds show up under "Refunds waiting to be sent" on the operator page.
+3. Set `APP_URL` on Vercel so emailed links never depend on request headers.
+4. Run `scripts/paystack-test-mode-check.ts` against Paystack test keys and record the results in `docs/solutions/paystack-split-refunds.md` before taking live payments. It settles how refunds, fees, and payout balances behave.
+

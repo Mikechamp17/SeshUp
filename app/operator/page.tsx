@@ -9,6 +9,9 @@ export const metadata = { title: "Operator" };
 const PROBLEM_TITLES: Record<Problem["kind"], string> = {
   gym_not_connected: "Gyms without a payment account",
   refund_failed: "Refunds that failed or keep retrying",
+  payment_mismatch: "Payments held for review",
+  refund_stuck: "Refunds submitted but not confirmed",
+  refund_overdue: "Refunds waiting to be sent",
   email_dead: "Emails that gave up",
 };
 

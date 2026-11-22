@@ -234,6 +234,51 @@ describe("refund job and ledger", () => {
     expect((await refunds())[0].status).toBe("submitted");
   });
 
+  it("checks the provider before retrying a refund whose result was lost, so it is never refunded twice", async () => {
+    const t = await paid({ startsInHours: 13 });
+    await cancel(t.member, t.booking);
+    const provider = createFakeProvider();
+    let failedOnce = false;
+    const lossy = async (fn: string, args?: Record<string, unknown>) => {
+      if (fn === "complete_refund" && !failedOnce) {
+        failedOnce = true;
+        return { data: null, error: { message: "connection lost" } };
+      }
+      return service(fn, args);
+    };
+    expect(await processDueRefunds({ rpc: lossy, provider })).toMatchObject({ failed: 1 });
+    await dueNow();
+    expect(await processDueRefunds({ rpc: lossy, provider })).toMatchObject({ submitted: 1, failed: 0 });
+    expect(provider.calls.filter((c) => c.method === "refund")).toHaveLength(1);
+  });
+
+  it("keeps polling a submitted refund and settles it, with its ledger rows, when the provider reports it processed", async () => {
+    const t = await paid({ startsInHours: 13 });
+    await cancel(t.member, t.booking);
+    const provider = createFakeProvider();
+    await processDueRefunds({ rpc: service, provider });
+    expect((await refunds())[0].status).toBe("submitted");
+    expect(await processDueRefunds({ rpc: service, provider })).toMatchObject({ claimed: 0 }); // not due yet
+
+    provider.finishRefunds(t.booking);
+    await sql("update public.refunds set next_attempt_at = now() - interval '1 minute'");
+    expect(await processDueRefunds({ rpc: service, provider })).toMatchObject({ processed: 1 });
+    expect((await refunds())[0].status).toBe("processed");
+    expect(await ledger()).toHaveLength(2);
+  });
+
+  it("shows refunds that are overdue, or stuck after submission, to the operator", async () => {
+    const a = await paid({ startsInHours: 13 });
+    await cancel(a.member, a.booking);
+    await sql("update public.refunds set next_attempt_at = now() - interval '20 minutes'");
+    const b = await paid({ startsInHours: 13 });
+    await cancel(b.member, b.booking);
+    await sql("update public.refunds set status = 'submitted', created_at = now() - interval '2 days' where booking_id = $1", [b.booking]);
+    const kinds = ((await service("operator_problems")).data as { kind: string }[]).map((p) => p.kind);
+    expect(kinds).toContain("refund_overdue");
+    expect(kinds).toContain("refund_stuck");
+  });
+
   it("refuses members and owners calling the refund functions directly", async () => {
     const member = await makeUser();
     for (const [fn, args] of [

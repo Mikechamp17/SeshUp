@@ -27,6 +27,8 @@ export type FakeProvider = PaymentProvider & {
   completeLate(reference: string): void;
   /** Outcome of the next refunds. "duplicate" returns the existing refund. */
   setRefundOutcome(outcome: FakeRefundOutcome): void;
+  /** The provider finishes refunds it accepted earlier for this payment reference. */
+  finishRefunds(reference: string): void;
   /** A body and signature, signed with FAKE_WEBHOOK_SECRET, to post to the webhook route. */
   makeWebhook(event: {
     type: "charge.success" | "refund.processed" | "refund.failed";
@@ -57,6 +59,12 @@ export function createFakeProvider(): FakeProvider {
     },
     setRefundOutcome(outcome) {
       refundOutcome = outcome;
+    },
+    finishRefunds(reference) {
+      refunds.set(
+        reference,
+        (refunds.get(reference) ?? []).map((r) => ({ ...r, status: "processed" as const })),
+      );
     },
 
     makeWebhook({ type, reference, amountCents, id }) {

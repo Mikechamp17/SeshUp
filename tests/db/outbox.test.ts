@@ -142,6 +142,7 @@ describe("data retention", () => {
       "insert into public.payments (gym_id, booking_id, amount_cents, fee_cents, provider_reference, status) values ($1,$2,10000,500,$3,'succeeded')",
       [gym.id, booking, booking],
     );
+    await enqueue("thandi@x.test");
     const res = await rpc("erase_member", { p_member: member });
     expect(res.error).toBeNull();
     const [p] = await sql<{ name: string; email: string | null; erased_at: string | null }>(
@@ -153,6 +154,8 @@ describe("data retention", () => {
     expect(p.erased_at).not.toBeNull();
     const [u] = await sql<{ email: string }>("select email from auth.users where id = $1", [member]);
     expect(u.email).not.toBe("thandi@x.test");
+    const queued = await sql<{ recipient: string; sent_at: string | null }>("select recipient, sent_at from public.email_outbox");
+    expect(queued.every((m) => m.recipient !== "thandi@x.test")).toBe(true);
     expect(await sql("select 1 from public.bookings where id = $1", [booking])).toHaveLength(1);
     expect(await sql("select 1 from public.payments where booking_id = $1", [booking])).toHaveLength(1);
   });

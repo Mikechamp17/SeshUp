@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { createFakeProvider, type FakeProvider } from "@/lib/payments/fake";
+import { createHmac } from "node:crypto";
+import { createFakeProvider, FAKE_WEBHOOK_SECRET, type FakeProvider } from "@/lib/payments/fake";
 import type { PaymentProvider } from "@/lib/payments/provider";
 import { confirmByReference } from "@/lib/booking/confirm";
 import { startCheckout } from "@/lib/booking/checkout";
@@ -228,6 +229,34 @@ describe("late and unusual payments", () => {
     expect(await sql("select 1 from public.payment_events where event_key like 'mismatch:%'")).toHaveLength(1);
   });
 
+  it("holds a mismatched payment for review: one record however often it is checked, never re-polled, and shown to the operator", async () => {
+    const { reverifyPendingPayments } = await import("@/lib/booking/confirm");
+    const { provider, session, member } = await setup();
+    const { bookingId } = (await checkout(provider, session, member)) as { bookingId: string };
+    provider.setVerifyOutcome(bookingId, "success");
+    const wrongAccount: PaymentProvider = { ...provider, verify: async (r) => ({ ...(await provider.verify(r)), subaccountCode: "ACCT_evil" }) };
+    for (let i = 0; i < 3; i++) await confirmByReference({ rpc: service, provider: wrongAccount, reference: bookingId });
+    expect(await sql("select 1 from public.payment_events where event_key like 'mismatch:%'")).toHaveLength(1);
+    const [pay] = await sql<{ status: string }>("select status from public.payments");
+    expect(pay.status).toBe("needs_review");
+    expect((await reverifyPendingPayments({ rpc: service, provider: wrongAccount })).checked).toBe(0);
+    const problems = (await service("operator_problems")).data as { kind: string }[];
+    expect(problems.map((p) => p.kind)).toContain("payment_mismatch");
+  });
+
+  it("explains a late payment for a cancelled class with one email and sends no second one when the refund is processed", async () => {
+    const { provider, session, member } = await setup();
+    const { bookingId } = (await checkout(provider, session, member)) as { bookingId: string };
+    await sql("update public.class_sessions set cancelled = true where id = $1", [session]);
+    await sql("update public.bookings set status = 'released_by_gym' where id = $1", [bookingId]);
+    provider.setVerifyOutcome(bookingId, "success");
+    await confirmByReference({ rpc: service, provider, reference: bookingId });
+    expect((await mailFor("m@x.test")).map((m) => m.template)).toEqual(["class_cancelled_by_gym"]);
+    const [refund] = await sql<{ id: string }>("select id from public.refunds");
+    await service("complete_refund", { p_refund_id: refund.id, p_provider_refund_id: "r1", p_processed: true });
+    expect((await mailFor("m@x.test")).map((m) => m.template)).toEqual(["class_cancelled_by_gym"]);
+  });
+
   it("lets a member confirm only through the server: authenticated callers cannot run the confirm function", async () => {
     const { member } = await setup();
     const res = await makeRpc("authenticated", member)("confirm_payment", {
@@ -236,6 +265,30 @@ describe("late and unusual payments", () => {
     expect(res.error?.message).toMatch(/permission denied/);
     const create = await makeRpc("authenticated", member)("create_payment", { p_booking_id: "00000000-0000-0000-0000-000000000000", p_fee_cents: 0 });
     expect(create.error?.message).toMatch(/permission denied/);
+  });
+});
+
+describe("webhook failures", () => {
+  it("answers 500 when confirming fails so the provider retries, then confirms on the retry", async () => {
+    const { provider, session, member } = await setup();
+    const { bookingId } = (await checkout(provider, session, member)) as { bookingId: string };
+    provider.setVerifyOutcome(bookingId, "success");
+    const hook = provider.makeWebhook({ type: "charge.success", reference: bookingId, amountCents: 10000, id: "evt_retry" });
+    const down: PaymentProvider = { ...provider, verify: async () => { throw new Error("provider down"); } };
+    expect((await handlePaymentWebhook({ rawBody: hook.rawBody, signature: hook.signature, provider: down, rpc: service })).status).toBe(500);
+    expect(await bookingStatus(bookingId)).toBe("pending");
+    expect((await handlePaymentWebhook({ rawBody: hook.rawBody, signature: hook.signature, provider, rpc: service })).status).toBe(200);
+    expect(await bookingStatus(bookingId)).toBe("confirmed");
+  });
+
+  it("answers 500 when a refund event cannot be settled and 200 for event types it does not use", async () => {
+    const { provider } = await setup();
+    const hook = provider.makeWebhook({ type: "refund.processed", reference: "x", amountCents: 1, id: "e1" });
+    const failing = async (fn: string) => ({ data: null, error: fn === "settle_refund_by_reference" ? { message: "boom" } : null });
+    expect((await handlePaymentWebhook({ rawBody: hook.rawBody, signature: hook.signature, provider, rpc: failing })).status).toBe(500);
+    const other = JSON.stringify({ event: "transfer.success", data: { id: "t1" } });
+    const signed = { rawBody: other, signature: createHmac("sha512", FAKE_WEBHOOK_SECRET).update(other).digest("hex") };
+    expect((await handlePaymentWebhook({ ...signed, provider, rpc: service })).status).toBe(200);
   });
 });
 

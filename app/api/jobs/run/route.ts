@@ -9,6 +9,8 @@ import { createJobsHandler } from "@/lib/jobs/handler";
 import type { Job } from "@/lib/jobs/registry";
 
 export const dynamic = "force-dynamic";
+// Money jobs run first, and every outbound call has its own timeout, so a slow email provider cannot starve them.
+export const maxDuration = 60;
 
 function getJobs(): Job[] {
   const db = createAdminClient();
@@ -17,16 +19,16 @@ function getJobs(): Job[] {
   const from = process.env.EMAIL_FROM ?? "";
   return [
     {
-      name: "send-emails",
-      run: () => sendDueEmails({ store: createEmailStore(rpc), sender: createResendSender({ apiKey, from }), baseUrl: process.env.APP_URL }),
-    },
-    {
       name: "reverify-payments",
       run: () => reverifyPendingPayments({ rpc, provider: getPaymentProvider() }),
     },
     {
       name: "process-refunds",
       run: () => processDueRefunds({ rpc, provider: getPaymentProvider() }),
+    },
+    {
+      name: "send-emails",
+      run: () => sendDueEmails({ store: createEmailStore(rpc), sender: createResendSender({ apiKey, from }), baseUrl: process.env.APP_URL }),
     },
     {
       name: "purge-old-data",

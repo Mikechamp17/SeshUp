@@ -67,6 +67,7 @@ export function createPaystackProvider(options: {
           "content-type": "application/json",
         },
         body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(10_000),
       });
     } catch (error) {
       const reason = error instanceof Error ? error.message : "unknown error";

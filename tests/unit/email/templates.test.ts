@@ -70,6 +70,7 @@ describe("Resend sender", () => {
     expect(calls[0].url).toBe("https://api.resend.com/emails");
     expect((calls[0].init.headers as Record<string, string>).authorization).toBe("Bearer re_key");
     expect(JSON.parse(String(calls[0].init.body))).toMatchObject({ to: "a@x.test", subject: "Hi" });
+    expect(calls[0].init.signal).toBeInstanceOf(AbortSignal); // a stalled provider cannot hang the job run
 
     const refused = createResendSender({
       apiKey: "k",

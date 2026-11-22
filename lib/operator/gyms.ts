@@ -32,7 +32,7 @@ export type GymRow = {
 export type AuthAccount = { userId: string; confirmed: boolean };
 
 export type Problem = {
-  kind: "gym_not_connected" | "refund_failed" | "email_dead";
+  kind: "gym_not_connected" | "refund_failed" | "payment_mismatch" | "refund_stuck" | "refund_overdue" | "email_dead";
   gym_id: string | null;
   gym_name: string | null;
   ref_id: string;

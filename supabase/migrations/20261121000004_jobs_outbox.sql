@@ -99,6 +99,7 @@ do $$
 begin
   if exists (select 1 from pg_available_extensions where name = 'pg_cron') then
     create extension if not exists pg_cron;
-    perform cron.schedule('seshup-minute', '* * * * *', 'select public.tidy(); select public.call_job_route();');
+    perform cron.schedule('seshup-tidy', '* * * * *', 'select public.tidy()');
+    perform cron.schedule('seshup-jobs', '* * * * *', 'select public.call_job_route()');
   end if;
 end $$;

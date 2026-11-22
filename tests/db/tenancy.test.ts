@@ -137,6 +137,17 @@ describe("tenancy and row-level security", () => {
     await expect(sql("delete from public.gyms where id = $1", [gym.id])).rejects.toThrow(/foreign key/);
   });
 
+  it("lets a member read a gym's public details but not its fee or payout account", async () => {
+    const gym = await makeGym({ feeBps: 700 });
+    const member = await makeUser();
+    await makeBooking(await makeSession(gym.id), member);
+    const ok = await asUser(member, (q) => q("select id, name, slug, timezone from public.gyms"));
+    expect(ok.rowCount).toBe(1);
+    await expect(asUser(member, (q) => q("select fee_bps from public.gyms"))).rejects.toThrow(/permission denied/);
+    await expect(asUser(member, (q) => q("select paystack_subaccount_code from public.gyms"))).rejects.toThrow(/permission denied/);
+    await expect(asUser(member, (q) => q("select * from public.gyms"))).rejects.toThrow(/permission denied/);
+  });
+
   it("creates a profile from the sign-up name and email", async () => {
     const id = await makeUser("Thandi", "thandi@example.test");
     const [p] = await sql<{ name: string; email: string }>("select name, email from public.profiles where id = $1", [id]);
