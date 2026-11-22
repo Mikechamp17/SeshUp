@@ -1,0 +1,121 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { requireStaff } from "@/lib/auth/roles";
+import { createClient } from "@/lib/supabase/server";
+import { changeSessionTime, createSeries, parseSeriesForm, setSpotLimit, updateSeries } from "@/lib/booking/schedule";
+import { formText as text, withParams } from "@/lib/http/url";
+import { zonedTimeToUtc } from "@/lib/time/gym-time";
+
+// Every action re-checks that the caller is staff of the gym in the URL, then acts with the caller's own session,
+// so row-level security and the owner-facing database functions apply.
+
+function back(path: string, params: Record<string, string>): never {
+  redirect(withParams(path, params));
+}
+
+async function gymFor(slug: string) {
+  await requireStaff(slug);
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("gyms").select("id, timezone").eq("slug", slug).single();
+  if (error || !data) back(`/admin/${slug}`, { error: "Gym not found." });
+  return { supabase, gym: data as { id: string; timezone: string } };
+}
+
+export async function addCoach(formData: FormData): Promise<void> {
+  const slug = text(formData, "slug");
+  const name = text(formData, "name");
+  const path = `/admin/${slug}/coaches`;
+  if (!name) back(path, { error: "Enter the coach's name." });
+  const { supabase, gym } = await gymFor(slug);
+  const { error } = await supabase.from("coaches").insert({ gym_id: gym.id, name });
+  if (error) back(path, { error: error.message });
+  back(path, { message: "Coach added." });
+}
+
+export async function renameCoach(formData: FormData): Promise<void> {
+  const slug = text(formData, "slug");
+  const path = `/admin/${slug}/coaches`;
+  const name = text(formData, "name");
+  if (!name) back(path, { error: "Enter the coach's name." });
+  const { supabase } = await gymFor(slug);
+  const { error } = await supabase.from("coaches").update({ name }).eq("id", text(formData, "coachId"));
+  if (error) back(path, { error: error.message });
+  back(path, { message: "Coach renamed." });
+}
+
+export async function createSeriesAction(formData: FormData): Promise<void> {
+  const slug = text(formData, "slug");
+  const path = `/admin/${slug}/classes`;
+  const parsed = parseSeriesForm(formData);
+  if (!parsed.ok) back(path, { error: parsed.error });
+  const { supabase, gym } = await gymFor(slug);
+  try {
+    await createSeries(supabase, gym.id, parsed.value);
+  } catch (e) {
+    back(path, { error: e instanceof Error ? e.message : "Could not create the class." });
+  }
+  back(path, { message: "Class created." });
+}
+
+export async function updateSeriesAction(formData: FormData): Promise<void> {
+  const slug = text(formData, "slug");
+  const seriesId = text(formData, "seriesId");
+  const path = `/admin/${slug}/classes/${seriesId}`;
+  const parsed = parseSeriesForm(formData);
+  if (!parsed.ok) back(path, { error: parsed.error });
+  const { supabase } = await gymFor(slug);
+  try {
+    await updateSeries(supabase, seriesId, parsed.value);
+  } catch (e) {
+    back(path, { error: e instanceof Error ? e.message : "Could not save the class." });
+  }
+  back(path, { message: "Saved. Dates with bookings or their own changes keep their current settings." });
+}
+
+export async function updateSessionAction(formData: FormData): Promise<void> {
+  const slug = text(formData, "slug");
+  const sessionId = text(formData, "sessionId");
+  const path = `/admin/${slug}/sessions/${sessionId}`;
+  const priceRand = Number(text(formData, "price"));
+  const cutoff = Number(text(formData, "cutoffHours"));
+  if (!Number.isFinite(priceRand) || priceRand <= 0) back(path, { error: "Enter a price above zero." });
+  if (!Number.isInteger(cutoff) || cutoff < 0) back(path, { error: "Enter the cutoff in whole hours." });
+  const { supabase } = await gymFor(slug);
+  const { error } = await supabase
+    .from("class_sessions")
+    .update({ price_cents: Math.round(priceRand * 100), cutoff_hours: cutoff, coach_id: text(formData, "coachId") || null })
+    .eq("id", sessionId);
+  if (error) back(path, { error: error.message });
+  back(path, { message: "Saved. The new price applies to bookings made from now on." });
+}
+
+export async function setSpotLimitAction(formData: FormData): Promise<void> {
+  const slug = text(formData, "slug");
+  const sessionId = text(formData, "sessionId");
+  const path = `/admin/${slug}/sessions/${sessionId}`;
+  const limit = Number(text(formData, "spotLimit"));
+  const { supabase } = await gymFor(slug);
+  try {
+    await setSpotLimit(supabase, sessionId, limit);
+  } catch (e) {
+    back(path, { error: e instanceof Error ? e.message : "Could not change the limit." });
+  }
+  back(path, { message: "Spot limit changed." });
+}
+
+export async function changeTimeAction(formData: FormData): Promise<void> {
+  const slug = text(formData, "slug");
+  const sessionId = text(formData, "sessionId");
+  const path = `/admin/${slug}/sessions/${sessionId}`;
+  const when = text(formData, "to"); // datetime-local value in the gym's time zone
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})$/.exec(when);
+  if (!match) back(path, { error: "Choose a new date and time." });
+  const { supabase, gym } = await gymFor(slug);
+  try {
+    await changeSessionTime(supabase, sessionId, zonedTimeToUtc(match[1], match[2], gym.timezone));
+  } catch (e) {
+    back(path, { error: e instanceof Error ? e.message : "Could not change the time." });
+  }
+  back(path, { message: "Time changed. Booked members have been emailed." });
+}

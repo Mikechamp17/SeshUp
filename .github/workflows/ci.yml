@@ -1,0 +1,53 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:db
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: npm ci
+      - run: supabase start
+      - run: npx playwright install --with-deps chromium
+      - name: Export local Supabase keys
+        run: |
+          supabase status -o env > /tmp/supabase.env
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$(grep '^API_URL' /tmp/supabase.env | cut -d= -f2 | tr -d '"')"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$(grep '^ANON_KEY' /tmp/supabase.env | cut -d= -f2 | tr -d '"')"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$(grep '^SERVICE_ROLE_KEY' /tmp/supabase.env | cut -d= -f2 | tr -d '"')"
+          } >> "$GITHUB_ENV"
+      - run: npm run test:e2e
