@@ -5,15 +5,23 @@ import { createClient } from "@/lib/supabase/server";
 import { formatGymDateTime } from "@/lib/time/gym-time";
 import { one } from "@/lib/db/rows";
 import { first, type SearchParams } from "@/lib/http/search-params";
-import { styles } from "../../g/styles";
+import { Alert, Topbar } from "../../ui";
 import { cancelBooking } from "./actions";
+import { CancelForm } from "./cancel-form";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Your bookings" };
 
-
 type Gym = { name: string; slug: string; timezone: string };
-type Session = { id: string; name: string; starts_at: string; price_cents: number; gyms: Gym | Gym[] | null };
+type Session = {
+  id: string;
+  name: string;
+  starts_at: string;
+  price_cents: number;
+  cutoff_hours: number;
+  time_changed: boolean;
+  gyms: Gym | Gym[] | null;
+};
 type Row = { id: string; class_sessions: Session | Session[] | null };
 
 export default async function MyBookingsPage({ searchParams }: { searchParams: SearchParams }) {
@@ -24,7 +32,7 @@ export default async function MyBookingsPage({ searchParams }: { searchParams: S
   const [{ data }, { data: waiting }] = await Promise.all([
     supabase
       .from("bookings")
-      .select("id, class_sessions(id, name, starts_at, price_cents, gyms(name, slug, timezone))")
+      .select("id, class_sessions(id, name, starts_at, price_cents, cutoff_hours, time_changed, gyms(name, slug, timezone))")
       .eq("status", "confirmed")
       .order("created_at"),
     supabase
@@ -52,62 +60,123 @@ export default async function MyBookingsPage({ searchParams }: { searchParams: S
   const confirmId = first(query.cancel);
   const error = first(query.error);
   const message = first(query.message);
+  const confirmIndex = upcoming.findIndex((b) => b.id === confirmId);
+  const confirming = confirmIndex >= 0 ? upcoming[confirmIndex] : null;
+
+  const cutoffText = (s: Session, tz: string) =>
+    formatGymDateTime(new Date(new Date(s.starts_at).getTime() - s.cutoff_hours * 3_600_000), tz);
 
   return (
-    <main style={styles.main}>
-      <h1>Your bookings</h1>
-      {error ? <p role="alert" style={styles.error}>{error}</p> : null}
-      {message ? <p role="status" style={styles.notice}>{message}</p> : null}
-      {upcoming.length === 0 ? <p>You have no upcoming classes booked.</p> : null}
-      {upcoming.map((b, i) => {
-        const gym = one(b.session.gyms);
-        return (
-          <div key={b.id} style={styles.card}>
-            <strong>{b.session.name}</strong>
-            <div style={styles.small}>
-              {gym ? `${gym.name} - ` : ""}
-              {formatGymDateTime(b.session.starts_at, gym?.timezone ?? "Africa/Johannesburg")}
-            </div>
-            <div style={styles.small}>
-              {refundable[i]
-                ? `Cancel now for a full refund of ${formatRand(b.session.price_cents)}.`
-                : "The cancellation cutoff has passed, so cancelling now means no refund."}
-            </div>
-            {confirmId === b.id ? (
-              <form action={cancelBooking} style={{ ...styles.form, marginTop: 8 }}>
-                <input type="hidden" name="bookingId" value={b.id} />
-                <p role="status" style={refundable[i] ? styles.notice : styles.error}>
-                  {refundable[i] ? "Cancel this booking and get a full refund?" : "Cancel this booking with no refund?"}
-                </p>
-                <button type="submit" style={styles.button}>Yes, cancel it</button>
-                <Link href="/account/bookings">Keep my booking</Link>
-              </form>
-            ) : (
-              <p style={{ marginBottom: 0 }}>
-                <Link href={`/account/bookings?cancel=${b.id}`}>Cancel booking</Link>
-              </p>
-            )}
+    <div className="app">
+      <Topbar name="My bookings" href="/" />
+      <main className="app-body">
+        <div style={{ padding: "16px 16px 0" }} className="stack">
+          {error ? <Alert kind="error" role="alert" title="Could not cancel">{error}</Alert> : null}
+          {message ? <Alert kind="ok" role="status">{message}</Alert> : null}
+        </div>
+
+        <div className="day-head"><h1 className="t-h2">Upcoming</h1></div>
+        {upcoming.length === 0 ? (
+          <div className="empty" style={{ marginTop: 0 }}>
+            <Alert title="No classes booked">You have no upcoming classes booked. Open your gym&apos;s link to see its timetable.</Alert>
           </div>
-        );
-      })}
-      {waitlisted.length > 0 ? (
-        <>
-          <h2>Waitlists</h2>
-          {waitlisted.map((w) => {
-            const gym = one(w.session.gyms);
-            return (
-              <div key={w.id} style={styles.card}>
-                <strong>{w.session.name}</strong>
-                <div style={styles.small}>
-                  {gym ? `${gym.name} - ` : ""}
-                  {formatGymDateTime(w.session.starts_at, gym?.timezone ?? "Africa/Johannesburg")}
-                </div>
-                {gym ? <Link href={`/g/${gym.slug}/classes/${w.session.id}`}>Open class</Link> : null}
+        ) : null}
+        {upcoming.map((b, i) => {
+          const gym = one(b.session.gyms);
+          const tz = gym?.timezone ?? "Africa/Johannesburg";
+          return (
+            <div key={b.id} className="bk">
+              <div className="bk-top">
+                <span className="badge b-open" style={{ alignSelf: "flex-start" }}>Confirmed</span>
+                <h2 className="t-h3">{b.session.name}</h2>
+                <p style={{ fontWeight: 700 }}>{formatGymDateTime(b.session.starts_at, tz)}</p>
+                <p className="cc-meta">
+                  {gym ? `${gym.name} · ` : ""}{formatRand(b.session.price_cents)} paid
+                </p>
               </div>
-            );
-          })}
+              <div className="bk-foot">
+                <p className="t-small">
+                  {b.session.time_changed ? (
+                    <><b>Full refund</b> any time, because the time of this class was changed.</>
+                  ) : refundable[i] ? (
+                    <><b>Full refund</b> if you cancel before {cutoffText(b.session, tz)}.</>
+                  ) : (
+                    <><b>No refund now.</b> The cutoff was {cutoffText(b.session, tz)}.</>
+                  )}
+                </p>
+                <Link className="btn btn-block btn-sm" href={`/account/bookings?cancel=${b.id}`}>Cancel booking</Link>
+              </div>
+            </div>
+          );
+        })}
+
+        {waitlisted.length > 0 ? (
+          <>
+            <div className="day-head" style={{ paddingTop: 12 }}><h2 className="t-h2">Waitlists</h2></div>
+            {waitlisted.map((w) => {
+              const gym = one(w.session.gyms);
+              return (
+                <div key={w.id} className="bk">
+                  <div className="bk-top">
+                    <span className="badge b-plain" style={{ alignSelf: "flex-start" }}>On the waitlist</span>
+                    <h2 className="t-h3">{w.session.name}</h2>
+                    <p style={{ fontWeight: 700 }}>{formatGymDateTime(w.session.starts_at, gym?.timezone ?? "Africa/Johannesburg")}</p>
+                    {gym ? <p className="cc-meta">{gym.name}</p> : null}
+                  </div>
+                  {gym ? (
+                    <div className="bk-foot">
+                      <Link className="btn btn-block btn-sm" href={`/g/${gym.slug}/classes/${w.session.id}`}>Open class</Link>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </>
+        ) : null}
+      </main>
+
+      {confirming ? (
+        <>
+          <Link className="scrim" href="/account/bookings" aria-label="Close and keep my booking" />
+          <div className="sheet" role="dialog" aria-label="Cancel booking">
+            <div className="grab" />
+            {(() => {
+              const s = confirming.session;
+              const gym = one(s.gyms);
+              const tz = gym?.timezone ?? "Africa/Johannesburg";
+              const ok = refundable[confirmIndex];
+              const amount = formatRand(s.price_cents);
+              return (
+                <>
+                  <div className="stack" style={{ gap: 4 }}>
+                    <span className="t-eyebrow">Cancel this booking?</span>
+                    <h2 className="t-h1">{s.name}</h2>
+                    <p style={{ fontWeight: 700 }}>{formatGymDateTime(s.starts_at, tz)}</p>
+                  </div>
+                  {ok ? (
+                    <Alert kind="ok" title={`You get ${amount} back`}>
+                      You are cancelling before the cutoff ({cutoffText(s, tz)}), so the full amount is refunded to your card through Paystack.
+                    </Alert>
+                  ) : (
+                    <Alert kind="error" title="No refund, R0.00">
+                      The cutoff for a refund has passed. If you cancel now you lose the {amount} you paid, and your spot goes back on sale.
+                    </Alert>
+                  )}
+                  <div className="card" style={{ padding: "4px 16px" }}>
+                    <div className="row"><span>Paid</span><b className="t-num">{amount}</b></div>
+                    <div className="row">
+                      <span>Refund</span>
+                      <b className="t-num" style={{ color: ok ? "var(--ok)" : "var(--cancel)" }}>{ok ? amount : "R0.00"}</b>
+                    </div>
+                  </div>
+                  <CancelForm action={cancelBooking} bookingId={confirming.id} refundable={ok} amount={amount} />
+                  <Link className={`btn btn-block${ok ? "" : " btn-primary"}`} href="/account/bookings">Keep my spot</Link>
+                </>
+              );
+            })()}
+          </div>
         </>
       ) : null}
-    </main>
+    </div>
   );
 }

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { formatRand } from "@/lib/money/fees";
 import { createClient } from "@/lib/supabase/server";
 import { gymLocalDate } from "@/lib/time/gym-time";
-import { styles } from "../styles";
+import { SpotsBadge, Topbar } from "../../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,15 @@ type Row = {
   bookable: boolean;
 };
 
-function dayLabel(localDate: string): string {
+function weekday(localDate: string): string {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short" }).format(new Date(`${localDate}T12:00:00Z`));
+}
+
+function dayMonth(localDate: string): string {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "short" }).format(new Date(`${localDate}T12:00:00Z`));
+}
+
+function longDay(localDate: string): string {
   return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long" }).format(
     new Date(`${localDate}T12:00:00Z`),
   );
@@ -53,6 +61,7 @@ export default async function TimetablePage({ params }: { params: Promise<{ gymS
     p_to: to.toISOString(),
   });
   const rows = (data ?? []) as Row[];
+  const today = gymLocalDate(from, gym.timezone);
 
   const days = new Map<string, Row[]>();
   for (const row of rows) {
@@ -61,35 +70,55 @@ export default async function TimetablePage({ params }: { params: Promise<{ gymS
   }
 
   return (
-    <main style={styles.main}>
-      <h1>{gym.name}</h1>
-      <p style={styles.small}>Pick a class to book your spot.</p>
-      {rows.length === 0 ? <p>No classes are scheduled yet. Check back soon.</p> : null}
-      {[...days.entries()].map(([day, classes]) => (
-        <section key={day} aria-label={dayLabel(day)}>
-          <h2 style={{ fontSize: 18 }}>{dayLabel(day)}</h2>
-          {classes.map((c) => (
-            <Link key={c.session_id} href={`/g/${gymSlug}/classes/${c.session_id}`} style={{ textDecoration: "none", color: "inherit" }}>
-              <div style={styles.card}>
-                <div style={styles.row}>
-                  <strong>{timeLabel(c.starts_at, gym.timezone)}</strong>
-                  <span>{c.name}</span>
+    <div className="app">
+      <Topbar name={gym.name} sub="Boxing classes · times are gym time" />
+      <main className="app-body">
+        <div style={{ padding: "16px 16px 0" }}>
+          <h1 className="t-h1">Book a class</h1>
+          <p className="t-small muted" style={{ marginTop: 6 }}>Next 14 days. Spots left are live. Pay once and your spot is confirmed.</p>
+        </div>
+        {rows.length === 0 ? (
+          <div className="empty">
+            <div className="alert"><div><b>No classes yet</b>No classes are scheduled yet. Check back soon.</div></div>
+          </div>
+        ) : null}
+        {[...days.entries()].map(([day, classes]) => (
+          <section key={day} aria-label={longDay(day)}>
+            <div className="day-head">
+              <h2 className="t-h2">{day === today ? "Today" : weekday(day)}</h2>
+              <span className="t-eyebrow">{day === today ? `${weekday(day)} ${dayMonth(day)}` : dayMonth(day)}</span>
+            </div>
+            {classes.map((c) => (
+              <Link key={c.session_id} href={`/g/${gymSlug}/classes/${c.session_id}`} className="class-card">
+                <div className="cc-time">
+                  <b>{timeLabel(c.starts_at, gym.timezone)}</b>
+                  <span>{c.length_minutes} min</span>
                 </div>
-                <div style={styles.small}>
-                  {c.level}
-                  {c.coach_name ? ` - Coach ${c.coach_name}` : ""} - {c.length_minutes} min
+                <div className="cc-main">
+                  <h3 className="t-h3">{c.name}</h3>
+                  <p className="cc-meta">
+                    {c.level}
+                    {c.coach_name ? ` · Coach ${c.coach_name}` : ""}
+                  </p>
+                  <div className="cc-foot">
+                    <SpotsBadge spotsLeft={c.spots_left} bookable={c.bookable} />
+                    {c.bookable && c.spots_left <= 0 ? (
+                      <span className="cc-action">Join waitlist</span>
+                    ) : (
+                      <span className="price">{formatRand(c.price_cents)}</span>
+                    )}
+                  </div>
                 </div>
-                <div style={styles.row}>
-                  <span>{formatRand(c.price_cents)}</span>
-                  <span style={{ marginLeft: "auto", fontWeight: 700 }}>
-                    {!c.bookable ? "Booking not open yet" : c.spots_left > 0 ? `${c.spots_left} spot${c.spots_left === 1 ? "" : "s"} left` : "Full"}
-                  </span>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </section>
-      ))}
-    </main>
+              </Link>
+            ))}
+          </section>
+        ))}
+        {rows.length > 0 ? (
+          <p className="t-small muted" style={{ padding: "20px 16px 0", textAlign: "center" }}>
+            Showing the next 14 days.<br />Cancelled classes are refunded automatically.
+          </p>
+        ) : null}
+      </main>
+    </div>
   );
 }
