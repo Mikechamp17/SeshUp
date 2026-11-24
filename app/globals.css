@@ -177,3 +177,9 @@ button.btn { font-family: var(--font-display); }
 .bare legend { padding: 0; font: 700 15px/1.2 var(--font-body); margin-bottom: 6px; }
 .row-actions { display: flex; gap: 8px; margin-top: 4px; }
 .row-actions .btn { flex: 1; min-height: 44px; font-size: 16px; padding: 0 8px; }
+.owner-card { margin: 0 16px 12px; background: var(--paper); border: 2px solid var(--ink); border-radius: var(--r-lg); overflow: hidden; }
+.owner-card.is-cancelled { border-style: dashed; }
+.owner-card .class-card { margin: 0; border: 0; border-radius: 0; min-height: 96px; }
+.owner-card .row-actions { margin: 0; padding: 10px 12px; border-top: 2px solid var(--ink); background: var(--bone); }
+.add-link { margin-left: auto; display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 2px solid var(--ink); border-radius: var(--r-pill);
+  background: var(--accent); color: var(--on-accent); font: 800 15px/1 var(--font-display); text-transform: uppercase; letter-spacing: .04em; text-decoration: none; }
