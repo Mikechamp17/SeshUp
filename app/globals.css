@@ -183,3 +183,5 @@ button.btn { font-family: var(--font-display); }
 .owner-card .row-actions { margin: 0; padding: 10px 12px; border-top: 2px solid var(--ink); background: var(--bone); }
 .add-link { margin-left: auto; display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 2px solid var(--ink); border-radius: var(--r-pill);
   background: var(--accent); color: var(--on-accent); font: 800 15px/1 var(--font-display); text-transform: uppercase; letter-spacing: .04em; text-decoration: none; }
+/* A sheet never grows past the visible screen: it scrolls inside itself, so a tall form stays reachable. */
+.sheet { max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; }

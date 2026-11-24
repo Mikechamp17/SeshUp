@@ -5,6 +5,7 @@ import { requireStaff } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { changeSessionTime, createSeries, parseSeriesForm, setSpotLimit, updateSeries } from "@/lib/booking/schedule";
 import { formText as text, withParams } from "@/lib/http/url";
+import { adminReturnPath } from "@/lib/admin/return-path";
 import { zonedTimeToUtc } from "@/lib/time/gym-time";
 
 // Every action re-checks that the caller is staff of the gym in the URL, then acts with the caller's own session,
@@ -12,6 +13,11 @@ import { zonedTimeToUtc } from "@/lib/time/gym-time";
 
 function back(path: string, params: Record<string, string>): never {
   redirect(withParams(path, params));
+}
+
+/** Where an action on one class date sends the owner afterwards: the page the form came from, else the date's own page. */
+function returnPath(formData: FormData, slug: string, sessionId: string): string {
+  return adminReturnPath(slug, text(formData, "next"), `/admin/${slug}/sessions/${sessionId}`);
 }
 
 async function gymFor(slug: string) {
@@ -76,12 +82,21 @@ export async function updateSeriesAction(formData: FormData): Promise<void> {
 export async function updateSessionAction(formData: FormData): Promise<void> {
   const slug = text(formData, "slug");
   const sessionId = text(formData, "sessionId");
-  const path = `/admin/${slug}/sessions/${sessionId}`;
+  const path = returnPath(formData, slug, sessionId);
   const priceRand = Number(text(formData, "price"));
   const cutoff = Number(text(formData, "cutoffHours"));
+  const spotLimit = text(formData, "spotLimit");
   if (!Number.isFinite(priceRand) || priceRand <= 0) back(path, { error: "Enter a price above zero." });
   if (!Number.isInteger(cutoff) || cutoff < 0) back(path, { error: "Enter the cutoff in whole hours." });
   const { supabase } = await gymFor(slug);
+  // The spot limit goes first, so a refusal for going below the spots already taken stops the whole save.
+  if (spotLimit !== "") {
+    try {
+      await setSpotLimit(supabase, sessionId, Number(spotLimit));
+    } catch (e) {
+      back(path, { error: e instanceof Error ? e.message : "Could not change the limit." });
+    }
+  }
   const { error } = await supabase
     .from("class_sessions")
     .update({ price_cents: Math.round(priceRand * 100), cutoff_hours: cutoff, coach_id: text(formData, "coachId") || null })
@@ -93,7 +108,7 @@ export async function updateSessionAction(formData: FormData): Promise<void> {
 export async function setSpotLimitAction(formData: FormData): Promise<void> {
   const slug = text(formData, "slug");
   const sessionId = text(formData, "sessionId");
-  const path = `/admin/${slug}/sessions/${sessionId}`;
+  const path = returnPath(formData, slug, sessionId);
   const limit = Number(text(formData, "spotLimit"));
   const { supabase } = await gymFor(slug);
   try {
@@ -107,7 +122,7 @@ export async function setSpotLimitAction(formData: FormData): Promise<void> {
 export async function changeTimeAction(formData: FormData): Promise<void> {
   const slug = text(formData, "slug");
   const sessionId = text(formData, "sessionId");
-  const path = `/admin/${slug}/sessions/${sessionId}`;
+  const path = returnPath(formData, slug, sessionId);
   const when = text(formData, "to"); // datetime-local value in the gym's time zone
   const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})$/.exec(when);
   if (!match) back(path, { error: "Choose a new date and time." });

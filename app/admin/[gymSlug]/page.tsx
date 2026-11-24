@@ -5,6 +5,7 @@ import { clockTime, dayHeading, groupSessionsByDay } from "@/lib/admin/timetable
 import { first, type SearchParams } from "@/lib/http/search-params";
 import { Alert } from "../../ui";
 import { Banner } from "../banner";
+import { TimetableSheet, type SheetKind } from "./sheets";
 
 export const metadata = { title: "Gym admin" };
 
@@ -66,6 +67,10 @@ export default async function AdminHome({
   const sheetLink = (sheet: string, id: string) => `${base}?sheet=${sheet}&id=${id}`;
   const error = first(query.error);
   const message = first(query.message);
+  // One sheet may be open over the timetable, chosen by the link that was tapped. A cancelled date has no actions.
+  const sheetKind = first(query.sheet);
+  const sheetRow = rows.find((r) => r.id === first(query.id) && !r.cancelled);
+  const openSheet = sheetRow && (sheetKind === "cancel" || sheetKind === "move" || sheetKind === "edit") ? (sheetKind as SheetKind) : null;
 
   return (
     <>
@@ -125,6 +130,9 @@ export default async function AdminHome({
       <div className="cta-bar">
         <Link className="btn btn-primary btn-block" href={`${base}/classes/new`}>+ Add a class</Link>
       </div>
+      {openSheet && sheetRow ? (
+        <TimetableSheet kind={openSheet} row={sheetRow} gymSlug={gymSlug} timeZone={gym.timezone} to={first(query.to)} />
+      ) : null}
     </>
   );
 }
