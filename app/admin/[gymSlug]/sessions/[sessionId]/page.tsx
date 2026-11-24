@@ -6,14 +6,13 @@ import { formatGymDateTime } from "@/lib/time/gym-time";
 import { first, type SearchParams } from "@/lib/http/search-params";
 import { Alert } from "../../../../ui";
 import { Banner } from "../../../banner";
-import { formatRand } from "@/lib/money/fees";
+import { CancelWarning, type CancelPreview } from "../../../cancel-warning";
 import { changeTimeAction, setSpotLimitAction, updateSessionAction } from "../../actions";
 import { cancelDateAction } from "./cancel-action";
 
 export const metadata = { title: "Class date" };
 
 type Person = { name: string; email: string | null };
-type CancelPreview = { booked: number; refund_total_cents: number; waitlisted: number };
 
 export default async function SessionPage({
   params,
@@ -166,10 +165,7 @@ export default async function SessionPage({
           {preview ? (
             <form action={cancelDateAction} className="form-stack">
               {hidden}
-              <Alert kind="error" role="alert" title="This cannot be undone">
-                {preview.booked} booked member{preview.booked === 1 ? "" : "s"} will be refunded {formatRand(preview.refund_total_cents)} in total and emailed
-                {preview.waitlisted > 0 ? `. ${preview.waitlisted} waitlisted member${preview.waitlisted === 1 ? "" : "s"} will be removed from the waitlist` : ""}.
-              </Alert>
+              <CancelWarning preview={preview} />
               <button type="submit" className="btn btn-danger btn-block">Yes, cancel this class</button>
               <Link className="btn btn-block" href={`/admin/${gymSlug}/sessions/${sessionId}`}>Keep it</Link>
             </form>

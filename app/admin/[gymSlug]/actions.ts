@@ -74,7 +74,6 @@ export async function createSeriesAction(formData: FormData): Promise<void> {
   back(`/admin/${slug}`, { message: "Class created. Its dates are on the timetable." });
 }
 
-/** Adds one date that never repeats. The date and time are the gym's own. */
 export async function createOneOffAction(formData: FormData): Promise<void> {
   const slug = text(formData, "slug");
   const path = `/admin/${slug}/classes/new`;
@@ -89,7 +88,6 @@ export async function createOneOffAction(formData: FormData): Promise<void> {
   back(`/admin/${slug}`, { message: `Class added for ${formatGymDateTime(parsed.value.startsAt, gym.timezone)}.` });
 }
 
-/** Stops a repeating class. The database removes its empty future dates and keeps the rest. */
 export async function endSeriesAction(formData: FormData): Promise<void> {
   const slug = text(formData, "slug");
   const seriesId = text(formData, "seriesId");

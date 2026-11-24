@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { first, type SearchParams } from "@/lib/http/search-params";
 import { Alert } from "../../../../ui";
 import { Banner } from "../../../banner";
+import { SheetFrame } from "../../../sheet-frame";
 import { endSeriesAction, updateSeriesAction } from "../../actions";
 import { SeriesForm } from "../../series-form";
 
@@ -41,12 +42,13 @@ export default async function EditSeriesPage({
       supabase.from("bookings").select("session_id, status").in("session_id", ids),
       supabase.from("waitlist_entries").select("session_id").in("session_id", ids),
     ]);
+    const confirmedBy = new Map<string, number>();
+    for (const b of bookings ?? []) confirmedBy.set(b.session_id, (confirmedBy.get(b.session_id) ?? 0) + (b.status === "confirmed" ? 1 : 0));
+    const waitingOn = new Set((waiting ?? []).map((w) => w.session_id));
     for (const d of dates ?? []) {
       if (d.cancelled) continue;
-      const mine = (bookings ?? []).filter((b) => b.session_id === d.id);
-      const waits = (waiting ?? []).filter((w) => w.session_id === d.id);
-      if (mine.length === 0 && waits.length === 0) removable += 1;
-      else staying.push({ id: d.id, local_date: d.local_date, booked: mine.filter((b) => b.status === "confirmed").length });
+      if (confirmedBy.has(d.id) || waitingOn.has(d.id)) staying.push({ id: d.id, local_date: d.local_date, booked: confirmedBy.get(d.id) ?? 0 });
+      else removable += 1;
     }
   }
 
@@ -58,31 +60,31 @@ export default async function EditSeriesPage({
       {series.ended ? (
         <Alert title="This class has stopped">It no longer makes new dates. Dates that had bookings stay below until they are cancelled.</Alert>
       ) : (
-        <p className="t-small muted" style={{ marginBottom: 16 }}>
-          Changes here apply to upcoming dates that have no bookings and no changes of their own. To change one date, open it below.
-        </p>
-      )}
-      {series.ended ? null : <SeriesForm
-        action={updateSeriesAction}
-        slug={gymSlug}
-        seriesId={seriesId}
-        coaches={coaches ?? []}
-        submitLabel="Save class"
-        defaults={{
-          name: series.name,
-          description: series.description,
-          level: series.level,
-          coachId: series.coach_id ?? "",
-          weekdays: series.weekdays as number[],
-          startTime: String(series.start_time).slice(0, 5),
-          lengthMinutes: series.length_minutes,
-          spotLimit: series.spot_limit,
-          priceRand: (series.price_cents / 100).toFixed(2),
-          cutoffHours: series.cutoff_hours,
-        }}
-      />}
-      {series.ended ? null : (
-        <Link className="btn btn-block" style={{ marginTop: 16 }} href={`/admin/${gymSlug}/classes/${seriesId}?stop=1`}>Stop this class</Link>
+        <>
+          <p className="t-small muted" style={{ marginBottom: 16 }}>
+            Changes here apply to upcoming dates that have no bookings and no changes of their own. To change one date, open it below.
+          </p>
+          <SeriesForm
+            action={updateSeriesAction}
+            slug={gymSlug}
+            seriesId={seriesId}
+            coaches={coaches ?? []}
+            submitLabel="Save class"
+            defaults={{
+              name: series.name,
+              description: series.description,
+              level: series.level,
+              coachId: series.coach_id ?? "",
+              weekdays: series.weekdays as number[],
+              startTime: String(series.start_time).slice(0, 5),
+              lengthMinutes: series.length_minutes,
+              spotLimit: series.spot_limit,
+              priceRand: (series.price_cents / 100).toFixed(2),
+              cutoffHours: series.cutoff_hours,
+            }}
+          />
+          <Link className="btn btn-block" style={{ marginTop: 16 }} href={`/admin/${gymSlug}/classes/${seriesId}?stop=1`}>Stop this class</Link>
+        </>
       )}
       <h2 className="t-h2" style={{ margin: "24px 0 12px" }}>Upcoming dates</h2>
       <div className="form-stack" style={{ gap: 8 }}>
@@ -93,36 +95,34 @@ export default async function EditSeriesPage({
         ))}
       </div>
       {stopping ? (
-        <>
-          <Link className="scrim" href={`/admin/${gymSlug}/classes/${seriesId}`} aria-label="Close and keep the class" />
-          <div className="sheet" role="dialog" aria-label={`Stop ${series.name}`}>
-            <div className="grab" />
-            <div className="stack" style={{ gap: 4 }}>
-              <span className="t-eyebrow">Stop this class?</span>
-              <h2 className="t-h1">{series.name}</h2>
+        <SheetFrame
+          eyebrow="Stop this class?"
+          title={series.name}
+          ariaLabel={`Stop ${series.name}`}
+          closeHref={`/admin/${gymSlug}/classes/${seriesId}`}
+          closeLabel="Keep it"
+          scrimLabel="Close and keep the class"
+        >
+          <Alert kind="warn" role="alert" title="No new dates will be made">
+            {removable} empty date{removable === 1 ? "" : "s"} will be removed.
+            {staying.length > 0 ? " These dates stay because they have bookings. Cancel them yourself if you want them gone:" : " Every future date is empty or already cancelled."}
+          </Alert>
+          {staying.length > 0 ? (
+            <div className="card" style={{ padding: "4px 16px" }}>
+              {staying.map((d) => (
+                <div key={d.id} className="row">
+                  <Link className="linkish" href={`/admin/${gymSlug}/sessions/${d.id}`}>{d.local_date}</Link>
+                  <b>{d.booked > 0 ? `${d.booked} booked` : "waitlist only"}</b>
+                </div>
+              ))}
             </div>
-            <Alert kind="warn" role="alert" title="No new dates will be made">
-              {removable} empty date{removable === 1 ? "" : "s"} will be removed.
-              {staying.length > 0 ? " These dates stay because they have bookings. Cancel them yourself if you want them gone:" : " Every future date is empty or already cancelled."}
-            </Alert>
-            {staying.length > 0 ? (
-              <div className="card" style={{ padding: "4px 16px" }}>
-                {staying.map((d) => (
-                  <div key={d.id} className="row">
-                    <Link className="linkish" href={`/admin/${gymSlug}/sessions/${d.id}`}>{d.local_date}</Link>
-                    <b>{d.booked > 0 ? `${d.booked} booked` : "waitlist only"}</b>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            <form action={endSeriesAction}>
-              <input type="hidden" name="slug" value={gymSlug} />
-              <input type="hidden" name="seriesId" value={seriesId} />
-              <button type="submit" className="btn btn-danger btn-block">Yes, stop this class</button>
-            </form>
-            <Link className="btn btn-block" href={`/admin/${gymSlug}/classes/${seriesId}`}>Keep it</Link>
-          </div>
-        </>
+          ) : null}
+          <form action={endSeriesAction}>
+            <input type="hidden" name="slug" value={gymSlug} />
+            <input type="hidden" name="seriesId" value={seriesId} />
+            <button type="submit" className="btn btn-danger btn-block">Yes, stop this class</button>
+          </form>
+        </SheetFrame>
       ) : null}
     </main>
   );

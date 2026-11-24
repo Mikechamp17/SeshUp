@@ -36,7 +36,6 @@ export function friendlyError(message: string): string {
 type ClassFields = Omit<SeriesInput, "weekdays" | "startTime">;
 type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
 
-/** The fields a repeating class and a one-off class share. */
 function parseClassFields(formData: FormData): Parsed<ClassFields> {
   const text = (k: string) => String(formData.get(k) ?? "").trim();
   const num = (k: string) => Number(text(k));
@@ -149,7 +148,6 @@ export async function changeSessionTime(supabase: SupabaseClient, sessionId: str
   if (error) throw new Error(friendlyError(error.message));
 }
 
-/** Adds one date with no repeating class behind it. */
 export async function createOneOff(supabase: SupabaseClient, gymId: string, input: OneOffInput): Promise<string> {
   const { data, error } = await supabase.rpc("create_one_off_class", {
     p_gym: gymId,
@@ -167,7 +165,6 @@ export async function createOneOff(supabase: SupabaseClient, gymId: string, inpu
   return data as string;
 }
 
-/** Stops a repeating class. Returns how many empty dates were removed and how many future dates stay. */
 export async function endSeries(supabase: SupabaseClient, seriesId: string): Promise<{ removed: number; kept: number }> {
   const { data, error } = await supabase.rpc("end_series", { p_series: seriesId });
   if (error) throw new Error(friendlyError(error.message));
@@ -175,7 +172,6 @@ export async function endSeries(supabase: SupabaseClient, seriesId: string): Pro
   return { removed: result.removed, kept: result.kept };
 }
 
-/** What the owner is told after stopping a class. */
 export function stopMessage(removed: number, kept: number): string {
   if (removed === 0 && kept === 0) return "Class stopped. It had no future dates to remove.";
   const parts = ["Class stopped."];

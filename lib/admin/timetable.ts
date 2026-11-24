@@ -9,7 +9,9 @@ export function groupSessionsByDay<T extends { starts_at: string }>(rows: T[], t
   const groups = new Map<string, T[]>();
   for (const row of sorted) {
     const key = gymLocalDate(row.starts_at, timeZone);
-    groups.set(key, [...(groups.get(key) ?? []), row]);
+    const day = groups.get(key);
+    if (day) day.push(row);
+    else groups.set(key, [row]);
   }
   return [...groups.entries()].map(([date, sessions]) => ({ date, isToday: date === today, sessions }));
 }
@@ -22,7 +24,6 @@ export function dayHeading(localDate: string, isToday: boolean): { title: string
   return isToday ? { title: "Today", sub: `${weekday} ${dayMonth}` } : { title: weekday, sub: dayMonth };
 }
 
-/** The clock time of a class in the gym's zone, such as "18:00". */
 export function clockTime(startsAt: string, timeZone: string): string {
   return new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(startsAt));
 }

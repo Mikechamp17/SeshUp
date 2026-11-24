@@ -5,7 +5,7 @@ import { clockTime, dayHeading, groupSessionsByDay } from "@/lib/admin/timetable
 import { first, type SearchParams } from "@/lib/http/search-params";
 import { Alert } from "../../ui";
 import { Banner } from "../banner";
-import { TimetableSheet, type SheetKind } from "./sheets";
+import { SHEET_KINDS, TimetableSheet } from "./sheets";
 
 export const metadata = { title: "Gym admin" };
 
@@ -68,9 +68,8 @@ export default async function AdminHome({
   const error = first(query.error);
   const message = first(query.message);
   // One sheet may be open over the timetable, chosen by the link that was tapped. A cancelled date has no actions.
-  const sheetKind = first(query.sheet);
   const sheetRow = rows.find((r) => r.id === first(query.id) && !r.cancelled);
-  const openSheet = sheetRow && (sheetKind === "cancel" || sheetKind === "move" || sheetKind === "edit") ? (sheetKind as SheetKind) : null;
+  const openSheet = sheetRow ? SHEET_KINDS.find((k) => k === first(query.sheet)) : undefined;
 
   return (
     <>
@@ -131,7 +130,7 @@ export default async function AdminHome({
         <Link className="btn btn-primary btn-block" href={`${base}/classes/new`}>+ Add a class</Link>
       </div>
       {openSheet && sheetRow ? (
-        <TimetableSheet kind={openSheet} row={sheetRow} gymSlug={gymSlug} timeZone={gym.timezone} to={first(query.to)} />
+        <TimetableSheet kind={openSheet} row={sheetRow} gymSlug={gymSlug} gymId={gym.id} timeZone={gym.timezone} to={first(query.to)} />
       ) : null}
     </>
   );
