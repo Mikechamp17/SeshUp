@@ -1,5 +1,4 @@
 import { LEVELS } from "@/lib/booking/schedule";
-import { styles } from "../styles";
 
 export type SeriesDefaults = {
   name: string;
@@ -31,66 +30,66 @@ export function SeriesForm(props: {
 }) {
   const d = props.defaults;
   return (
-    <form action={props.action} style={styles.form}>
+    <form action={props.action} className="form-stack">
       <input type="hidden" name="slug" value={props.slug} />
       {props.seriesId ? <input type="hidden" name="seriesId" value={props.seriesId} /> : null}
-      <label style={styles.label}>
-        Class name
-        <input name="name" defaultValue={d.name} required style={styles.input} />
-      </label>
-      <label style={styles.label}>
-        Description
-        <textarea name="description" defaultValue={d.description} rows={3} style={styles.input} />
-      </label>
-      <label style={styles.label}>
-        Level
-        <select name="level" defaultValue={d.level} style={styles.input}>
+      <div className="field">
+        <label htmlFor="name">Class name</label>
+        <input id="name" name="name" defaultValue={d.name} required className="input" />
+      </div>
+      <div className="field">
+        <label htmlFor="description">Description</label>
+        <textarea id="description" name="description" defaultValue={d.description} rows={3} className="input textarea" />
+      </div>
+      <div className="field">
+        <label htmlFor="level">Level</label>
+        <select id="level" name="level" defaultValue={d.level} className="input">
           {LEVELS.map((l) => (
             <option key={l} value={l}>{l}</option>
           ))}
         </select>
-      </label>
-      <label style={styles.label}>
-        Coach
-        <select name="coachId" defaultValue={d.coachId} style={styles.input}>
+      </div>
+      <div className="field">
+        <label htmlFor="coachId">Coach</label>
+        <select id="coachId" name="coachId" defaultValue={d.coachId} className="input">
           <option value="">No coach</option>
           {props.coaches.map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
-      </label>
-      <fieldset style={{ ...styles.input, border: "1px solid #888" }}>
+      </div>
+      <fieldset className="bare">
         <legend>Repeats weekly on</legend>
-        <div style={styles.row}>
+        <div className="chips">
           {DAYS.map(([n, label]) => (
-            <label key={n} style={{ display: "flex", gap: 4 }}>
+            <label key={n} className="chip">
               <input type="checkbox" name="weekdays" value={n} defaultChecked={d.weekdays.includes(n)} />
               {label}
             </label>
           ))}
         </div>
       </fieldset>
-      <label style={styles.label}>
-        Start time (gym time)
-        <input name="startTime" type="time" defaultValue={d.startTime} required style={styles.input} />
-      </label>
-      <label style={styles.label}>
-        Length (minutes)
-        <input name="length" type="number" min={1} defaultValue={d.lengthMinutes} required style={styles.input} />
-      </label>
-      <label style={styles.label}>
-        Spots
-        <input name="spotLimit" type="number" min={1} defaultValue={d.spotLimit} required style={styles.input} />
-      </label>
-      <label style={styles.label}>
-        Price (rand)
-        <input name="price" type="number" min={1} step="0.01" defaultValue={d.priceRand} required style={styles.input} />
-      </label>
-      <label style={styles.label}>
-        Free cancellation until (hours before start)
-        <input name="cutoffHours" type="number" min={0} defaultValue={d.cutoffHours} style={styles.input} />
-      </label>
-      <button type="submit" style={styles.button}>{props.submitLabel}</button>
+      <div className="field">
+        <label htmlFor="startTime">Start time (gym time)</label>
+        <input id="startTime" name="startTime" type="time" defaultValue={d.startTime} required className="input" />
+      </div>
+      <div className="field">
+        <label htmlFor="length">Length (minutes)</label>
+        <input id="length" name="length" type="number" min={1} defaultValue={d.lengthMinutes} required className="input" />
+      </div>
+      <div className="field">
+        <label htmlFor="spotLimit">Spots</label>
+        <input id="spotLimit" name="spotLimit" type="number" min={1} defaultValue={d.spotLimit} required className="input" />
+      </div>
+      <div className="field">
+        <label htmlFor="price">Price (rand)</label>
+        <input id="price" name="price" type="number" min={1} step="0.01" defaultValue={d.priceRand} required className="input" />
+      </div>
+      <div className="field">
+        <label htmlFor="cutoffHours">Free cancellation until (hours before start)</label>
+        <input id="cutoffHours" name="cutoffHours" type="number" min={0} defaultValue={d.cutoffHours} className="input" />
+      </div>
+      <button type="submit" className="btn btn-primary btn-block">{props.submitLabel}</button>
     </form>
   );
 }

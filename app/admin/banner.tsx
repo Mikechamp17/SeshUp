@@ -1,10 +1,12 @@
-import { styles } from "./styles";
+import { Alert } from "../ui";
 
+/** Shows the result or error an owner action redirected back with. */
 export function Banner({ error, message }: { error?: string; message?: string }) {
+  if (!error && !message) return null;
   return (
-    <>
-      {error ? <p role="alert" style={styles.error}>{error}</p> : null}
-      {message ? <p role="status" style={styles.notice}>{message}</p> : null}
-    </>
+    <div className="form-stack" style={{ marginBottom: 16 }}>
+      {error ? <Alert kind="error" role="alert" title="Could not do that">{error}</Alert> : null}
+      {message ? <Alert kind="ok" role="status">{message}</Alert> : null}
+    </div>
   );
 }

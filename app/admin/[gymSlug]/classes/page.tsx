@@ -3,7 +3,6 @@ import { requireStaff } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { first, type SearchParams } from "@/lib/http/search-params";
 import { Banner } from "../../banner";
-import { styles } from "../../styles";
 import { createSeriesAction } from "../actions";
 import { EMPTY_SERIES, SeriesForm } from "../series-form";
 
@@ -32,21 +31,20 @@ export default async function ClassesPage({
   const { data: coaches } = await supabase.from("coaches").select("id, name").eq("gym_id", gym?.id ?? "").order("name");
 
   return (
-    <main style={styles.main}>
-      <p><Link href={`/admin/${gymSlug}`}>Back</Link></p>
-      <h1>Classes</h1>
+    <main className="app-body pad">
+      <h1 className="t-h1" style={{ marginBottom: 16 }}>Classes</h1>
       <Banner error={first(query.error)} message={first(query.message)} />
-      {(series ?? []).map((s) => (
-        <Link key={s.id} href={`/admin/${gymSlug}/classes/${s.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-          <div style={styles.card}>
-            <strong>{s.name}</strong> - {s.level}
-            <div style={styles.small}>
-              {(s.weekdays as number[]).map((d) => DAY_NAMES[d]).join(", ")} at {String(s.start_time).slice(0, 5)}, {s.spot_limit} spots
-            </div>
-          </div>
-        </Link>
-      ))}
-      <h2>Add a class</h2>
+      <div className="form-stack">
+        {(series ?? []).map((s) => (
+          <Link key={s.id} href={`/admin/${gymSlug}/classes/${s.id}`} className="card" style={{ textDecoration: "none", color: "inherit" }}>
+            <h2 className="t-h3">{s.name}</h2>
+            <p className="cc-meta">
+              {(s.weekdays as number[]).map((d) => DAY_NAMES[d]).join(", ")} at {String(s.start_time).slice(0, 5)} · {s.level} · {s.spot_limit} spots
+            </p>
+          </Link>
+        ))}
+      </div>
+      <h2 className="t-h2" style={{ margin: "24px 0 12px" }}>Add a class</h2>
       <SeriesForm action={createSeriesAction} slug={gymSlug} coaches={coaches ?? []} defaults={EMPTY_SERIES} submitLabel="Create class" />
     </main>
   );
