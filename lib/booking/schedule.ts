@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { lookupMessage } from "@/lib/http/url";
+import { formText, lookupMessage } from "@/lib/http/url";
 import { zonedTimeToUtc } from "@/lib/time/gym-time";
 
 export const LEVELS = ["Beginner", "Intermediate", "Advanced", "Sparring"] as const;
@@ -37,7 +37,7 @@ type ClassFields = Omit<SeriesInput, "weekdays" | "startTime">;
 type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
 
 function parseClassFields(formData: FormData): Parsed<ClassFields> {
-  const text = (k: string) => String(formData.get(k) ?? "").trim();
+  const text = (k: string) => formText(formData, k);
   const num = (k: string) => Number(text(k));
   const level = text("level") as Level;
   const priceRand = Number(text("price"));
@@ -66,7 +66,7 @@ function parseClassFields(formData: FormData): Parsed<ClassFields> {
 }
 
 export function parseSeriesForm(formData: FormData): Parsed<SeriesInput> {
-  const text = (k: string) => String(formData.get(k) ?? "").trim();
+  const text = (k: string) => formText(formData, k);
   const weekdays = formData.getAll("weekdays").map((v) => Number(v)).filter((n) => Number.isInteger(n) && n >= 1 && n <= 7);
   const fields = parseClassFields(formData);
   if (!fields.ok) return fields;
@@ -87,7 +87,7 @@ function isRealDate(date: string): boolean {
 
 /** A class for one date. The date and time are the gym's local ones and become one instant in its time zone. */
 export function parseOneOffForm(formData: FormData, timeZone: string): Parsed<OneOffInput> {
-  const text = (k: string) => String(formData.get(k) ?? "").trim();
+  const text = (k: string) => formText(formData, k);
   const date = text("date");
   if (!isRealDate(date)) return { ok: false, error: "Choose the date of the class." };
   if (!/^\d{2}:\d{2}$/.test(text("startTime"))) return { ok: false, error: "Enter a start time." };
