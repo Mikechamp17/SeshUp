@@ -20,6 +20,10 @@ export const EMPTY_SERIES: SeriesDefaults = {
 
 const DAYS: [number, string][] = [[1, "Mon"], [2, "Tue"], [3, "Wed"], [4, "Thu"], [5, "Fri"], [6, "Sat"], [7, "Sun"]];
 
+/**
+ * The class form. A repeating class asks for weekdays and a one-off asks for a date. With `compact`, the fields most
+ * classes never change (level, coach, description, cancellation hours) sit under "More options".
+ */
 export function SeriesForm(props: {
   action: (formData: FormData) => Promise<void>;
   slug: string;
@@ -27,16 +31,12 @@ export function SeriesForm(props: {
   coaches: { id: string; name: string }[];
   defaults: SeriesDefaults;
   submitLabel: string;
+  once?: { date: string; minDate: string };
+  compact?: boolean;
 }) {
   const d = props.defaults;
-  return (
-    <form action={props.action} className="form-stack">
-      <input type="hidden" name="slug" value={props.slug} />
-      {props.seriesId ? <input type="hidden" name="seriesId" value={props.seriesId} /> : null}
-      <div className="field">
-        <label htmlFor="name">Class name</label>
-        <input id="name" name="name" defaultValue={d.name} required className="input" />
-      </div>
+  const optional = (
+    <>
       <div className="field">
         <label htmlFor="description">Description</label>
         <textarea id="description" name="description" defaultValue={d.description} rows={3} className="input textarea" />
@@ -58,17 +58,39 @@ export function SeriesForm(props: {
           ))}
         </select>
       </div>
-      <fieldset className="bare">
-        <legend>Repeats weekly on</legend>
-        <div className="chips">
-          {DAYS.map(([n, label]) => (
-            <label key={n} className="chip">
-              <input type="checkbox" name="weekdays" value={n} defaultChecked={d.weekdays.includes(n)} />
-              {label}
-            </label>
-          ))}
+      <div className="field">
+        <label htmlFor="cutoffHours">Free cancellation until (hours before start)</label>
+        <input id="cutoffHours" name="cutoffHours" type="number" min={0} defaultValue={d.cutoffHours} className="input" />
+      </div>
+    </>
+  );
+
+  return (
+    <form action={props.action} className="form-stack">
+      <input type="hidden" name="slug" value={props.slug} />
+      {props.seriesId ? <input type="hidden" name="seriesId" value={props.seriesId} /> : null}
+      <div className="field">
+        <label htmlFor="name">Class name</label>
+        <input id="name" name="name" defaultValue={d.name} required className="input" />
+      </div>
+      {props.once ? (
+        <div className="field">
+          <label htmlFor="date">Date</label>
+          <input id="date" name="date" type="date" min={props.once.minDate} defaultValue={props.once.date} required className="input" />
         </div>
-      </fieldset>
+      ) : (
+        <fieldset className="bare">
+          <legend>Repeats weekly on</legend>
+          <div className="chips">
+            {DAYS.map(([n, label]) => (
+              <label key={n} className="chip">
+                <input type="checkbox" name="weekdays" value={n} defaultChecked={d.weekdays.includes(n)} />
+                {label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
       <div className="field">
         <label htmlFor="startTime">Start time (gym time)</label>
         <input id="startTime" name="startTime" type="time" defaultValue={d.startTime} required className="input" />
@@ -85,10 +107,14 @@ export function SeriesForm(props: {
         <label htmlFor="price">Price (rand)</label>
         <input id="price" name="price" type="number" min={1} step="0.01" defaultValue={d.priceRand} required className="input" />
       </div>
-      <div className="field">
-        <label htmlFor="cutoffHours">Free cancellation until (hours before start)</label>
-        <input id="cutoffHours" name="cutoffHours" type="number" min={0} defaultValue={d.cutoffHours} className="input" />
-      </div>
+      {props.compact ? (
+        <details className="more">
+          <summary>More options</summary>
+          <div className="form-stack" style={{ marginTop: 12 }}>{optional}</div>
+        </details>
+      ) : (
+        optional
+      )}
       <button type="submit" className="btn btn-primary btn-block">{props.submitLabel}</button>
     </form>
   );

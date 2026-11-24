@@ -3,10 +3,20 @@
 import { redirect } from "next/navigation";
 import { requireStaff } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
-import { changeSessionTime, createSeries, parseSeriesForm, setSpotLimit, updateSeries } from "@/lib/booking/schedule";
+import {
+  changeSessionTime,
+  createOneOff,
+  createSeries,
+  endSeries,
+  parseOneOffForm,
+  parseSeriesForm,
+  setSpotLimit,
+  stopMessage,
+  updateSeries,
+} from "@/lib/booking/schedule";
 import { formText as text, withParams } from "@/lib/http/url";
 import { adminReturnPath } from "@/lib/admin/return-path";
-import { zonedTimeToUtc } from "@/lib/time/gym-time";
+import { formatGymDateTime, zonedTimeToUtc } from "@/lib/time/gym-time";
 
 // Every action re-checks that the caller is staff of the gym in the URL, then acts with the caller's own session,
 // so row-level security and the owner-facing database functions apply.
@@ -52,16 +62,46 @@ export async function renameCoach(formData: FormData): Promise<void> {
 
 export async function createSeriesAction(formData: FormData): Promise<void> {
   const slug = text(formData, "slug");
-  const path = `/admin/${slug}/classes`;
+  const path = `/admin/${slug}/classes/new`;
   const parsed = parseSeriesForm(formData);
-  if (!parsed.ok) back(path, { error: parsed.error });
+  if (!parsed.ok) back(path, { kind: "weekly", error: parsed.error });
   const { supabase, gym } = await gymFor(slug);
   try {
     await createSeries(supabase, gym.id, parsed.value);
   } catch (e) {
-    back(path, { error: e instanceof Error ? e.message : "Could not create the class." });
+    back(path, { kind: "weekly", error: e instanceof Error ? e.message : "Could not create the class." });
   }
-  back(path, { message: "Class created." });
+  back(`/admin/${slug}`, { message: "Class created. Its dates are on the timetable." });
+}
+
+/** Adds one date that never repeats. The date and time are the gym's own. */
+export async function createOneOffAction(formData: FormData): Promise<void> {
+  const slug = text(formData, "slug");
+  const path = `/admin/${slug}/classes/new`;
+  const { supabase, gym } = await gymFor(slug);
+  const parsed = parseOneOffForm(formData, gym.timezone);
+  if (!parsed.ok) back(path, { kind: "once", date: text(formData, "date"), error: parsed.error });
+  try {
+    await createOneOff(supabase, gym.id, parsed.value);
+  } catch (e) {
+    back(path, { kind: "once", date: text(formData, "date"), error: e instanceof Error ? e.message : "Could not add the class." });
+  }
+  back(`/admin/${slug}`, { message: `Class added for ${formatGymDateTime(parsed.value.startsAt, gym.timezone)}.` });
+}
+
+/** Stops a repeating class. The database removes its empty future dates and keeps the rest. */
+export async function endSeriesAction(formData: FormData): Promise<void> {
+  const slug = text(formData, "slug");
+  const seriesId = text(formData, "seriesId");
+  const path = `/admin/${slug}/classes/${seriesId}`;
+  const { supabase } = await gymFor(slug);
+  let result: { removed: number; kept: number };
+  try {
+    result = await endSeries(supabase, seriesId);
+  } catch (e) {
+    back(path, { error: e instanceof Error ? e.message : "Could not stop the class." });
+  }
+  back(`/admin/${slug}`, { message: stopMessage(result.removed, result.kept) });
 }
 
 export async function updateSeriesAction(formData: FormData): Promise<void> {

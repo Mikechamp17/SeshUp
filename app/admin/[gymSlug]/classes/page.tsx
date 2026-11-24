@@ -3,8 +3,6 @@ import { requireStaff } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { first, type SearchParams } from "@/lib/http/search-params";
 import { Banner } from "../../banner";
-import { createSeriesAction } from "../actions";
-import { EMPTY_SERIES, SeriesForm } from "../series-form";
 
 export const metadata = { title: "Classes" };
 
@@ -28,7 +26,6 @@ export default async function ClassesPage({
     .eq("gym_id", gym?.id ?? "")
     .eq("ended", false)
     .order("name");
-  const { data: coaches } = await supabase.from("coaches").select("id, name").eq("gym_id", gym?.id ?? "").order("name");
 
   return (
     <main className="app-body pad">
@@ -44,8 +41,10 @@ export default async function ClassesPage({
           </Link>
         ))}
       </div>
-      <h2 className="t-h2" style={{ margin: "24px 0 12px" }}>Add a class</h2>
-      <SeriesForm action={createSeriesAction} slug={gymSlug} coaches={coaches ?? []} defaults={EMPTY_SERIES} submitLabel="Create class" />
+      {(series ?? []).length === 0 ? (
+        <p className="t-body muted">No weekly classes yet. Use the button below to add one.</p>
+      ) : null}
+      <Link className="btn btn-primary btn-block" style={{ marginTop: 24 }} href={`/admin/${gymSlug}/classes/new`}>+ Add a class</Link>
     </main>
   );
 }
