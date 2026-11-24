@@ -76,7 +76,7 @@ test("sign-up with an email already in use shows an error and creates no second 
   await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { name: "First" } });
 
   await signUpThroughForm(page, "Second", email, "/auth/sign-up");
-  await expect(page.getByRole("alert")).toContainText("already exists");
+  await expect(page.getByRole("alert").filter({ hasText: "already exists" })).toBeVisible();
 
   const { data } = await admin.from("profiles").select("id").eq("email", email);
   expect(data).toHaveLength(1);
