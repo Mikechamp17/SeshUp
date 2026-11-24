@@ -2,7 +2,7 @@ import { requireUser } from "@/lib/auth/roles";
 import { safeNextPath } from "@/lib/auth/redirect";
 import { setPassword } from "../actions";
 import { first, type SearchParams } from "@/lib/http/search-params";
-import { styles } from "../styles";
+import { Alert, AuthShell } from "../../ui";
 
 export const metadata = { title: "Choose a password" };
 
@@ -15,23 +15,17 @@ export default async function SetPasswordPage({ searchParams }: { searchParams: 
   await requireUser(`/auth/set-password?next=${encodeURIComponent(next)}`);
 
   return (
-    <main style={styles.main}>
-      <h1>Choose a password</h1>
-      {error ? (
-        <p role="alert" style={styles.error}>
-          {error}
-        </p>
-      ) : null}
-      <form action={setPassword} style={styles.form}>
+    <AuthShell title="Choose a password">
+      {error ? <Alert kind="error" role="alert">{error}</Alert> : null}
+      <form action={setPassword} className="form-stack">
         <input type="hidden" name="next" value={next} />
-        <label style={styles.label}>
-          New password
-          <input name="password" type="password" autoComplete="new-password" minLength={6} required style={styles.input} />
-        </label>
-        <button type="submit" style={styles.button}>
-          Save password
-        </button>
+        <div className="field">
+          <label htmlFor="password">New password</label>
+          <input id="password" name="password" type="password" autoComplete="new-password" minLength={6} required className="input" />
+          <span className="hint">At least 6 characters.</span>
+        </div>
+        <button type="submit" className="btn btn-primary btn-block">Save password</button>
       </form>
-    </main>
+    </AuthShell>
   );
 }

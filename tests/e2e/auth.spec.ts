@@ -44,18 +44,17 @@ async function signUpThroughForm(page: Page, name: string, email: string, path: 
   await page.getByRole("button", { name: "Create account" }).click();
 }
 
-// Reads the newest message for an address from the local mail catcher.
+// Reads the newest message for an address from the local mail catcher (Mailpit).
 async function latestEmailBody(email: string): Promise<string> {
-  const mailbox = email.split("@")[0];
   for (let attempt = 0; attempt < 20; attempt++) {
-    const list = await fetch(`${mailApi}/api/v1/mailbox/${mailbox}`);
+    const list = await fetch(`${mailApi}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`);
     if (list.ok) {
-      const messages = (await list.json()) as Array<{ id: string }>;
-      const last = messages[messages.length - 1];
-      if (last) {
-        const message = await fetch(`${mailApi}/api/v1/mailbox/${mailbox}/${last.id}`);
-        const body = (await message.json()) as { body: { text?: string; html?: string } };
-        return `${body.body.text ?? ""}\n${body.body.html ?? ""}`;
+      const found = (await list.json()) as { messages?: Array<{ ID: string }> };
+      const newest = found.messages?.[0];
+      if (newest) {
+        const message = await fetch(`${mailApi}/api/v1/message/${newest.ID}`);
+        const body = (await message.json()) as { Text?: string; HTML?: string };
+        return `${body.Text ?? ""}\n${body.HTML ?? ""}`;
       }
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -77,7 +76,7 @@ test("sign-up with an email already in use shows an error and creates no second 
   await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { name: "First" } });
 
   await signUpThroughForm(page, "Second", email, "/auth/sign-up");
-  await expect(page.getByRole("alert")).toContainText("already exists");
+  await expect(page.getByRole("alert").filter({ hasText: "already exists" })).toBeVisible();
 
   const { data } = await admin.from("profiles").select("id").eq("email", email);
   expect(data).toHaveLength(1);

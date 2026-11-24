@@ -4,8 +4,17 @@ import { styles as base } from "@/app/auth/styles";
 export const styles: Record<string, CSSProperties> = {
   ...base,
   main: { maxWidth: 560, margin: "0 auto", padding: 16 },
-  card: { border: "1px solid #ccc", borderRadius: 8, padding: 12, marginBottom: 10 },
+  card: { border: "2px solid var(--ink)", borderRadius: 16, padding: 12, marginBottom: 10, background: "var(--paper)" },
   row: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" },
-  small: { color: "#555", fontSize: 14 },
-  secondary: { padding: 12, fontSize: 16, fontWeight: 600, border: "1px solid #111", borderRadius: 6, background: "#fff", color: "#111" },
+  small: { color: "var(--ink-3)", fontSize: 14 },
+  secondary: {
+    padding: 12,
+    minHeight: 48,
+    fontSize: 16,
+    fontWeight: 700,
+    border: "2px solid var(--ink)",
+    borderRadius: 12,
+    background: "var(--paper)",
+    color: "var(--ink)",
+  },
 };

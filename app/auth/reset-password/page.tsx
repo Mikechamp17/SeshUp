@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requestPasswordReset } from "../actions";
 import { first, type SearchParams } from "@/lib/http/search-params";
-import { styles } from "../styles";
+import { Alert, AuthShell } from "../../ui";
 
 export const metadata = { title: "Reset password" };
 
@@ -11,30 +11,19 @@ export default async function ResetPasswordPage({ searchParams }: { searchParams
   const sent = first(params.sent) === "1";
 
   return (
-    <main style={styles.main}>
-      <h1>Reset your password</h1>
-      {error ? (
-        <p role="alert" style={styles.error}>
-          {error}
-        </p>
-      ) : null}
+    <AuthShell title="Reset your password">
+      {error ? <Alert kind="error" role="alert">{error}</Alert> : null}
       {sent ? (
-        <p role="status" style={styles.notice}>
-          If an account exists for that email, we have sent a link to reset the password.
-        </p>
+        <Alert kind="ok" role="status">If an account exists for that email, we have sent a link to reset the password.</Alert>
       ) : null}
-      <form action={requestPasswordReset} style={styles.form}>
-        <label style={styles.label}>
-          Email
-          <input name="email" type="email" autoComplete="email" required style={styles.input} />
-        </label>
-        <button type="submit" style={styles.button}>
-          Send reset link
-        </button>
+      <form action={requestPasswordReset} className="form-stack">
+        <div className="field">
+          <label htmlFor="email">Email</label>
+          <input id="email" name="email" type="email" autoComplete="email" required className="input" />
+        </div>
+        <button type="submit" className="btn btn-primary btn-block">Send reset link</button>
       </form>
-      <p style={styles.footer}>
-        <Link href="/auth/sign-in">Back to sign in</Link>
-      </p>
-    </main>
+      <Link className="linkish" href="/auth/sign-in">Back to sign in</Link>
+    </AuthShell>
   );
 }
